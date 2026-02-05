@@ -9,6 +9,11 @@ const userSchema = new mongoose.Schema(
         return !this.isAdmin;
       },
     },
+    role: {
+      type: String,
+      enum: ["student", "teacher", "other"],
+      default: "other",
+    },
     email: {
       type: String,
       required: true,
@@ -18,6 +23,10 @@ const userSchema = new mongoose.Schema(
     password: {
       type: String,
       required: true,
+    },
+    transcriptions: {
+      type: Number,
+      default: 0,
     },
     isAdmin: {
       type: Boolean,
