@@ -29,7 +29,7 @@ const audienceLabel = (audience, targetUser) => {
   }
 };
 
-const buildAudienceQuery = (audience, targetUserId) => {
+const buildAudienceQuery = (audience, targetUserIds) => {
   if (audience === "students") {
     return { isAdmin: false, role: "student" };
   }
@@ -37,7 +37,10 @@ const buildAudienceQuery = (audience, targetUserId) => {
     return { isAdmin: false, role: "teacher" };
   }
   if (audience === "user") {
-    return { isAdmin: false, _id: targetUserId };
+    if (!targetUserIds || targetUserIds.length === 0) {
+      return { _id: { $in: [] } };
+    }
+    return { isAdmin: false, _id: { $in: targetUserIds } };
   }
   return { isAdmin: false };
 };
@@ -58,19 +61,22 @@ export const getRecipientCount = async (req, res) => {
       return res.status(400).json({ message: "Invalid audience" });
     }
 
-    const targetUserId = req.query.targetUserId || null;
-    if (audience === "user" && !targetUserId) {
-      return res.status(400).json({ message: "targetUserId is required" });
-    }
-
+    let targetUserIds = [];
     if (audience === "user") {
-      const user = await User.findById(targetUserId).select("_id isAdmin");
-      if (!user || user.isAdmin) {
-        return res.status(404).json({ message: "User not found" });
+      const targetUserIdsParam = req.query.targetUserIds;
+      if (!targetUserIdsParam) {
+        return res.status(400).json({ message: "targetUserIds is required" });
+      }
+      targetUserIds = Array.isArray(targetUserIdsParam)
+        ? targetUserIdsParam
+        : String(targetUserIdsParam).split(",");
+
+      if (targetUserIds.length === 0) {
+        return res.status(400).json({ message: "At least one user ID is required" });
       }
     }
 
-    const count = await User.countDocuments(buildAudienceQuery(audience, targetUserId));
+    const count = await User.countDocuments(buildAudienceQuery(audience, targetUserIds));
     res.json({ count });
   } catch (error) {
     res.status(500).json({ message: "Failed to get recipient count", error: error.message });
@@ -79,7 +85,7 @@ export const getRecipientCount = async (req, res) => {
 
 export const createNotification = async (req, res) => {
   try {
-    const { title, message, type, audience, targetUserId, scheduledAt } = req.body;
+    const { title, message, type, audience, targetUserIds, scheduledAt } = req.body;
 
     if (!title || !message) {
       return res.status(400).json({ message: "Title and message are required" });
@@ -95,15 +101,20 @@ export const createNotification = async (req, res) => {
       return res.status(400).json({ message: "Invalid audience" });
     }
 
-    if (normalizedAudience === "user" && !targetUserId) {
-      return res.status(400).json({ message: "targetUserId is required" });
-    }
-
-    let targetUser = null;
+    let userIds = [];
     if (normalizedAudience === "user") {
-      targetUser = await User.findById(targetUserId).select("_id email isAdmin");
-      if (!targetUser || targetUser.isAdmin) {
-        return res.status(404).json({ message: "User not found" });
+      if (!targetUserIds || !Array.isArray(targetUserIds) || targetUserIds.length === 0) {
+        return res.status(400).json({ message: "At least one user must be selected" });
+      }
+      userIds = targetUserIds;
+
+      const validUsers = await User.find({
+        isAdmin: false,
+        _id: { $in: userIds },
+      }).select("_id");
+
+      if (validUsers.length === 0) {
+        return res.status(404).json({ message: "No valid users found" });
       }
     }
 
@@ -115,7 +126,7 @@ export const createNotification = async (req, res) => {
     const now = new Date();
     const isScheduled = scheduledDate && scheduledDate > now;
     const recipientCount = await User.countDocuments(
-      buildAudienceQuery(normalizedAudience, targetUserId)
+      buildAudienceQuery(normalizedAudience, userIds)
     );
 
     const notification = await Notification.create({
@@ -123,7 +134,7 @@ export const createNotification = async (req, res) => {
       message: String(message).trim(),
       type: normalizedType,
       audience: normalizedAudience,
-      targetUserId: normalizedAudience === "user" ? targetUserId : null,
+      targetUserId: normalizedAudience === "user" ? userIds[0] : null,
       recipientCount,
       scheduledAt: isScheduled ? scheduledDate : null,
       sentAt: isScheduled ? null : now,
@@ -137,7 +148,7 @@ export const createNotification = async (req, res) => {
       message: notification.message,
       type: notification.type,
       audience: notification.audience,
-      audienceLabel: audienceLabel(notification.audience, targetUser),
+      audienceLabel: normalizedAudience === "user" ? `${userIds.length} user(s) selected` : "Specific User",
       sentDate: notification.sentAt,
       scheduledAt: notification.scheduledAt,
       status: notification.status,

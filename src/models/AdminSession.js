@@ -32,7 +32,6 @@ const adminSessionSchema = new mongoose.Schema(
 
 // Index for faster queries
 adminSessionSchema.index({ adminId: 1, isActive: 1 });
-adminSessionSchema.index({ token: 1 });
 adminSessionSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 export default mongoose.model("AdminSession", adminSessionSchema);
