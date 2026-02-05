@@ -134,7 +134,7 @@ export const createNotification = async (req, res) => {
       message: String(message).trim(),
       type: normalizedType,
       audience: normalizedAudience,
-      targetUserId: normalizedAudience === "user" ? userIds[0] : null,
+      targetUserIds: normalizedAudience === "user" ? userIds : [],
       recipientCount,
       scheduledAt: isScheduled ? scheduledDate : null,
       sentAt: isScheduled ? null : now,
@@ -163,20 +163,30 @@ export const listNotifications = async (req, res) => {
   try {
     const notifications = await Notification.find()
       .populate("createdBy", "name email")
-      .populate("targetUserId", "email")
+      .populate("targetUserIds", "email")
       .sort({ createdAt: -1 });
 
-    const payload = notifications.map((notif) => ({
-      id: notif._id,
-      title: notif.title,
-      message: notif.message,
-      type: notif.type,
-      audience: notif.audience,
-      audienceLabel: audienceLabel(notif.audience, notif.targetUserId),
-      sentBy: notif.createdBy?.name || notif.createdBy?.email || "Admin",
-      sentDate: notif.sentAt || notif.scheduledAt || notif.createdAt,
-      status: notif.status,
-    }));
+    const payload = notifications.map((notif) => {
+      let displayLabel = "";
+      if (notif.audience === "user") {
+        const count = notif.targetUserIds ? notif.targetUserIds.length : 0;
+        displayLabel = count > 0 ? `${count} user(s) selected` : "Specific User";
+      } else {
+        displayLabel = audienceLabel(notif.audience, null);
+      }
+
+      return {
+        id: notif._id,
+        title: notif.title,
+        message: notif.message,
+        type: notif.type,
+        audience: notif.audience,
+        audienceLabel: displayLabel,
+        sentBy: notif.createdBy?.name || notif.createdBy?.email || "Admin",
+        sentDate: notif.sentAt || notif.scheduledAt || notif.createdAt,
+        status: notif.status,
+      };
+    });
 
     res.json({ notifications: payload });
   } catch (error) {

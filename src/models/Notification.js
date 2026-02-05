@@ -24,11 +24,10 @@ const notificationSchema = new mongoose.Schema(
       enum: ["all", "students", "teachers", "user"],
       default: "all",
     },
-    targetUserId: {
+    targetUserIds: [{
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      default: null,
-    },
+    }],
     recipientCount: {
       type: Number,
       default: 0,
