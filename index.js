@@ -14,15 +14,34 @@ const app=express();
 const server = createServer(app);
 connect_db();
 
+// Increase body parser limit FIRST before other middleware
+app.use(bodyParser.json({ limit: '100mb' }));
+app.use(bodyParser.urlencoded({ limit: '100mb', extended: true }));
+
 // Security middleware
 app.use(helmet({
     crossOriginResourcePolicy: { policy: "cross-origin" }
 }));
 
-app.use(bodyParser.json());
+// CORS Configuration - Allow both web and mobile apps
+const allowedOrigins = [
+    process.env.FRONT_URL,              // Next.js Web App (http://localhost:3000)
+    process.env.REACT_APP_FRONTEND_URL  // React Native App (http://localhost:8081)
+].filter(Boolean); // Remove any undefined values
+
 app.use(cors({
-    origin:process.env.FRONT_URL,
-    credentials:true,
+    origin: (origin, callback) => {
+        // Allow requests with no origin (like mobile apps or Postman)
+        if (!origin) return callback(null, true);
+        
+        if (allowedOrigins.indexOf(origin) !== -1) {
+            callback(null, true);
+        } else {
+            console.log(`CORS blocked origin: ${origin}`);
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    credentials: true,
 }));
 
 // Trust proxy to get real IP addresses (important for rate limiting)
