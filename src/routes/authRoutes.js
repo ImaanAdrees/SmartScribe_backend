@@ -5,7 +5,10 @@ import {
   adminLogin, 
   adminLogout, 
   verifyAdmin,
-  refreshAdminToken
+  refreshAdminToken,
+  getAdminProfile,
+  updateAdminProfile,
+  changeAdminPassword
 } from "../controllers/authControllers.js";
 import { protect, adminOnly } from "../middleware/authMiddleware.js";
 import { 
@@ -26,5 +29,10 @@ router.post("/admin/login", adminLoginLimiter, checkAccountLockout, adminLogin);
 router.post("/admin/logout", protect, adminOnly, adminLogout);
 router.get("/admin/verify", protect, adminOnly, verifyAdmin);
 router.post("/admin/refresh", protect, adminOnly, refreshAdminToken);
+
+// Admin profile routes
+router.get("/admin/profile", protect, adminOnly, getAdminProfile);
+router.put("/admin/profile/update", protect, adminOnly, updateAdminProfile);
+router.put("/admin/profile/change-password", protect, adminOnly, changeAdminPassword);
 
 export default router;
