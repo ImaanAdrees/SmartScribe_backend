@@ -237,3 +237,112 @@ export const refreshAdminToken = async (req, res) => {
     res.status(500).json({ message: "Failed to refresh token" });
   }
 };
+
+// Get Admin Profile
+export const getAdminProfile = async (req, res) => {
+  try {
+    const admin = await User.findById(req.user._id).select("-password");
+    
+    if (!admin || !admin.isAdmin) {
+      return res.status(404).json({ message: "Admin profile not found" });
+    }
+
+    res.json({
+      success: true,
+      admin: {
+        _id: admin._id,
+        name: admin.name,
+        email: admin.email,
+        image: admin.image,
+        isAdmin: admin.isAdmin,
+      }
+    });
+  } catch (error) {
+    console.error("Get profile error:", error);
+    res.status(500).json({ message: "Failed to get profile" });
+  }
+};
+
+// Update Admin Profile (name, image)
+export const updateAdminProfile = async (req, res) => {
+  try {
+    const { name, image } = req.body;
+    const admin = await User.findById(req.user._id);
+
+    if (!admin || !admin.isAdmin) {
+      return res.status(404).json({ message: "Admin not found" });
+    }
+
+    // Update fields
+    if (name) admin.name = name;
+    if (image) admin.image = image;
+
+    await admin.save();
+
+    res.json({
+      success: true,
+      message: "Profile updated successfully",
+      admin: {
+        _id: admin._id,
+        name: admin.name,
+        email: admin.email,
+        image: admin.image,
+      }
+    });
+  } catch (error) {
+    console.error("Update profile error:", error);
+    res.status(500).json({ message: "Failed to update profile" });
+  }
+};
+
+// Change Admin Password
+export const changeAdminPassword = async (req, res) => {
+  try {
+    const { oldPassword, newPassword, confirmPassword } = req.body;
+
+    // Validate inputs
+    if (!oldPassword || !newPassword || !confirmPassword) {
+      return res.status(400).json({ 
+        message: "Old password, new password, and confirmation are required" 
+      });
+    }
+
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({ 
+        message: "New password and confirmation do not match" 
+      });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ 
+        message: "New password must be at least 6 characters long" 
+      });
+    }
+
+    const admin = await User.findById(req.user._id);
+
+    if (!admin || !admin.isAdmin) {
+      return res.status(404).json({ message: "Admin not found" });
+    }
+
+    // Check if old password is correct
+    const isPasswordCorrect = await admin.matchPassword(oldPassword);
+    if (!isPasswordCorrect) {
+      return res.status(401).json({ 
+        message: "Old password is incorrect" 
+      });
+    }
+
+    // Update password
+    admin.password = newPassword;
+    await admin.save();
+
+    res.json({
+      success: true,
+      message: "Password changed successfully"
+    });
+  } catch (error) {
+    console.error("Change password error:", error);
+    res.status(500).json({ message: "Failed to change password" });
+  }
+};
