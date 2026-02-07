@@ -1,5 +1,7 @@
 import Notification from "../models/Notification.js";
 import User from "../models/User.js";
+import UserNotification from "../models/UserNotification.js";
+import { io } from "../../index.js";
 
 const normalizeType = (type) => {
   if (!type) return "info";
@@ -142,6 +144,11 @@ export const createNotification = async (req, res) => {
       createdBy: req.user._id,
     });
 
+    // Emit real-time notification via Socket.IO if notification is sent immediately
+    if (!isScheduled) {
+      await emitNotificationViaSocket(notification, normalizedAudience, userIds);
+    }
+
     res.status(201).json({
       id: notification._id,
       title: notification.title,
@@ -156,6 +163,87 @@ export const createNotification = async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ message: "Failed to create notification", error: error.message });
+  }
+};
+
+// Helper function to emit notifications via Socket.IO and store in database
+const emitNotificationViaSocket = async (notification, audience, targetUserIds) => {
+  try {
+    const notificationPayload = {
+      id: notification._id,
+      title: notification.title,
+      message: notification.message,
+      type: notification.type,
+      audience: notification.audience,
+      sentDate: notification.sentAt,
+      status: notification.status,
+    };
+
+    let usersToNotify = [];
+
+    // Determine which users to notify
+    if (audience === "all") {
+      // Get all non-admin users
+      usersToNotify = await User.find({ isAdmin: false }).select("_id");
+      console.log(`[Notification] Sending to ALL users. Count: ${usersToNotify.length}`);
+      usersToNotify.forEach((user) => {
+        const roomName = `user_${user._id}`;
+        console.log(`[Notification] Emitting to room: ${roomName}`);
+        io.to(roomName).emit("new_notification", notificationPayload);
+      });
+    }
+    // Emit to students only
+    else if (audience === "students") {
+      usersToNotify = await User.find({ isAdmin: false, role: "student" }).select("_id");
+      console.log(`[Notification] Sending to STUDENTS. Count: ${usersToNotify.length}`);
+      usersToNotify.forEach((student) => {
+        io.to(`user_${student._id}`).emit("new_notification", notificationPayload);
+      });
+    }
+    // Emit to teachers only
+    else if (audience === "teachers") {
+      usersToNotify = await User.find({ isAdmin: false, role: "teacher" }).select("_id");
+      console.log(`[Notification] Sending to TEACHERS. Count: ${usersToNotify.length}`);
+      usersToNotify.forEach((teacher) => {
+        io.to(`user_${teacher._id}`).emit("new_notification", notificationPayload);
+      });
+    }
+    // Emit to specific users
+    else if (audience === "user" && targetUserIds && targetUserIds.length > 0) {
+      usersToNotify = targetUserIds.map((id) => ({ _id: id }));
+      console.log(`[Notification] Sending to SPECIFIC USERS. Count: ${usersToNotify.length}`);
+      targetUserIds.forEach((userId) => {
+        io.to(`user_${userId}`).emit("new_notification", notificationPayload);
+      });
+    }
+
+    // Store notification records in database for offline users
+    if (usersToNotify.length > 0) {
+      const userNotificationRecords = usersToNotify.map((user) => ({
+        userId: user._id,
+        notificationId: notification._id,
+        isRead: false,
+      }));
+
+      console.log(`[Notification] Storing ${userNotificationRecords.length} records in UserNotification`);
+      
+      const result = await UserNotification.insertMany(userNotificationRecords, { ordered: false }).catch(
+        (err) => {
+          // Ignore duplicate key errors
+          if (err.code !== 11000) {
+            console.error("[Notification] Error inserting records:", err);
+            throw err;
+          }
+          console.warn("[Notification] Duplicate key errors (expected for retries)");
+        }
+      );
+      
+      console.log(`[Notification] Successfully stored notifications. Result:`, result?.length);
+    } else {
+      console.warn("[Notification] No users to notify!");
+    }
+  } catch (error) {
+    console.error("[Notification] Error emitting notification via Socket.IO:", error);
   }
 };
 
@@ -193,3 +281,89 @@ export const listNotifications = async (req, res) => {
     res.status(500).json({ message: "Failed to load notifications", error: error.message });
   }
 };
+
+// Get user's notifications (for logged-in users)
+export const getUserNotifications = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    console.log(`[API] Fetching notifications for user: ${userId}`);
+
+    // Fetch all user notifications sorted by newest first
+    const userNotifications = await UserNotification.find({ userId })
+      .populate({
+        path: "notificationId",
+        select: "title message type sentAt status",
+      })
+      .sort({ createdAt: -1 });
+
+    console.log(`[API] Found ${userNotifications.length} user notifications`);
+
+    // Map to notification format
+    const notifications = userNotifications
+      .filter((un) => un.notificationId) // Ensure notification exists
+      .map((un) => ({
+        id: un.notificationId._id,
+        title: un.notificationId.title,
+        message: un.notificationId.message,
+        type: un.notificationId.type,
+        receivedAt: un.createdAt,
+        isRead: un.isRead,
+        userNotificationId: un._id, // To mark as read later
+      }));
+
+    console.log(`[API] Returning ${notifications.length} formatted notifications`);
+    res.json({ notifications });
+  } catch (error) {
+    console.error(`[API] Error fetching user notifications:`, error);
+    res.status(500).json({ message: "Failed to load user notifications", error: error.message });
+  }
+};
+
+// Mark notification as read
+export const markNotificationAsRead = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { notificationId } = req.params;
+
+    // Find user notification record
+    const userNotification = await UserNotification.findOne({
+      userId,
+      notificationId,
+    });
+
+    if (!userNotification) {
+      return res.status(404).json({ message: "Notification not found for this user" });
+    }
+
+    // Mark as read
+    userNotification.isRead = true;
+    await userNotification.save();
+
+    res.json({ message: "Notification marked as read" });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to mark notification as read", error: error.message });
+  }
+};
+
+// Delete user notification
+export const deleteUserNotification = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { notificationId } = req.params;
+
+    // Delete user notification record
+    const result = await UserNotification.findOneAndDelete({
+      userId,
+      notificationId,
+    });
+
+    if (!result) {
+      return res.status(404).json({ message: "Notification not found for this user" });
+    }
+
+    res.json({ message: "Notification deleted successfully" });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to delete notification", error: error.message });
+  }
+};
+

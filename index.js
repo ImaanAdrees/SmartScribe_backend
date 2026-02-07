@@ -3,6 +3,7 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import {createServer} from "http"
+import { Server } from "socket.io";
 import bodyParser from "body-parser";
 import cookieParser from "cookie-parser";
 import { connect_db } from "./src/config/mongo_connection.js";
@@ -12,9 +13,39 @@ import notificationRoutes from "./src/routes/notificationRoutes.js";
 
 const app=express();
 const server = createServer(app);
+
+// Initialize Socket.IO with CORS configuration
+const allowedOrigins = [
+    process.env.FRONT_URL,              // Next.js Web App (http://localhost:3000)
+    process.env.REACT_APP_FRONTEND_URL  // React Native App (http://localhost:8081)
+].filter(Boolean);
+
+export const io = new Server(server, {
+    cors: {
+        origin: allowedOrigins,
+        methods: ["GET", "POST"],
+        credentials: true,
+    },
+});
+
+// Socket.IO connection handler
+io.on("connection", (socket) => {
+    console.log(`User connected: ${socket.id}`);
+    
+    // Join user to their personal notification room
+    socket.on("join_room", (userId) => {
+        socket.join(`user_${userId}`);
+        console.log(`User ${userId} joined room: user_${userId}`);
+    });
+    
+    socket.on("disconnect", () => {
+        console.log(`User disconnected: ${socket.id}`);
+    });
+});
+
 connect_db();
 
-// Increase body parser limit FIRST before other middleware
+
 app.use(bodyParser.json({ limit: '100mb' }));
 app.use(bodyParser.urlencoded({ limit: '100mb', extended: true }));
 
@@ -23,15 +54,9 @@ app.use(helmet({
     crossOriginResourcePolicy: { policy: "cross-origin" }
 }));
 
-// CORS Configuration - Allow both web and mobile apps
-const allowedOrigins = [
-    process.env.FRONT_URL,              // Next.js Web App (http://localhost:3000)
-    process.env.REACT_APP_FRONTEND_URL  // React Native App (http://localhost:8081)
-].filter(Boolean); // Remove any undefined values
-
 app.use(cors({
     origin: (origin, callback) => {
-        // Allow requests with no origin (like mobile apps or Postman)
+      
         if (!origin) return callback(null, true);
         
         if (allowedOrigins.indexOf(origin) !== -1) {
