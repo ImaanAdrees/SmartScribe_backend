@@ -50,6 +50,11 @@ const notificationSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
+    tag: {
+      type: String,
+      default: "SmartScribe",
+      trim: true,
+    },
   },
   { timestamps: true }
 );

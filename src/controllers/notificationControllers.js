@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import Notification from "../models/Notification.js";
 import User from "../models/User.js";
 import UserNotification from "../models/UserNotification.js";
@@ -177,6 +178,7 @@ const emitNotificationViaSocket = async (notification, audience, targetUserIds) 
       audience: notification.audience,
       sentDate: notification.sentAt,
       status: notification.status,
+      tag: notification.tag || "SmartScribe",
     };
 
     let usersToNotify = [];
@@ -309,6 +311,7 @@ export const getUserNotifications = async (req, res) => {
         receivedAt: un.createdAt,
         isRead: un.isRead,
         userNotificationId: un._id, // To mark as read later
+        tag: un.notificationId.tag || "SmartScribe",
       }));
 
     console.log(`[API] Returning ${notifications.length} formatted notifications`);
@@ -325,11 +328,18 @@ export const markNotificationAsRead = async (req, res) => {
     const userId = req.user._id;
     const { notificationId } = req.params;
 
+    console.log(`[MarkAsRead] userId: ${userId}, notificationId: ${notificationId}`);
+
+    // Convert notificationId string to ObjectId
+    const notifId = new mongoose.Types.ObjectId(notificationId);
+
     // Find user notification record
     const userNotification = await UserNotification.findOne({
       userId,
-      notificationId,
+      notificationId: notifId,
     });
+
+    console.log(`[MarkAsRead] Found notification:`, userNotification ? 'Yes' : 'No');
 
     if (!userNotification) {
       return res.status(404).json({ message: "Notification not found for this user" });
@@ -339,8 +349,10 @@ export const markNotificationAsRead = async (req, res) => {
     userNotification.isRead = true;
     await userNotification.save();
 
+    console.log(`[MarkAsRead] Notification marked as read`);
     res.json({ message: "Notification marked as read" });
   } catch (error) {
+    console.error(`[MarkAsRead] Error:`, error);
     res.status(500).json({ message: "Failed to mark notification as read", error: error.message });
   }
 };
@@ -351,18 +363,28 @@ export const deleteUserNotification = async (req, res) => {
     const userId = req.user._id;
     const { notificationId } = req.params;
 
+    console.log(`[DeleteNotification] userId: ${userId}, notificationId: ${notificationId}`);
+
+    // Convert notificationId string to ObjectId
+    const notifId = new mongoose.Types.ObjectId(notificationId);
+
     // Delete user notification record
     const result = await UserNotification.findOneAndDelete({
       userId,
-      notificationId,
+      notificationId: notifId,
     });
 
+    console.log(`[DeleteNotification] Delete result:`, result ? 'Success' : 'Not Found');
+
     if (!result) {
+      console.warn(`[DeleteNotification] Notification not found for user`);
       return res.status(404).json({ message: "Notification not found for this user" });
     }
 
+    console.log(`[DeleteNotification] Notification deleted successfully`);
     res.json({ message: "Notification deleted successfully" });
   } catch (error) {
+    console.error(`[DeleteNotification] Error:`, error);
     res.status(500).json({ message: "Failed to delete notification", error: error.message });
   }
 };

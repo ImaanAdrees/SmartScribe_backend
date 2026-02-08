@@ -141,6 +141,18 @@ export const adminLogin = async (req, res) => {
   }
 };
 
+// User Logout
+export const logout = async (req, res) => {
+  try {
+    res.status(200).json({
+      message: "Logged out successfully",
+    });
+  } catch (error) {
+    console.error("Logout error:", error);
+    res.status(500).json({ message: "Logout failed" });
+  }
+};
+
 // Admin Logout - Invalidate session
 export const adminLogout = async (req, res) => {
   try {

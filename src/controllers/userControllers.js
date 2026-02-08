@@ -1,4 +1,10 @@
 import User from "../models/User.js";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const formatRole = (role) => {
   if (!role) return "Other";
@@ -169,5 +175,103 @@ export const deleteUser = async (req, res) => {
     res.json({ message: "User deleted" });
   } catch (error) {
     res.status(500).json({ message: "Failed to delete user", error: error.message });
+  }
+};
+
+// Upload profile image
+export const uploadProfileImage = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: "Please upload an image" });
+    }
+
+    const userId = req.user.id;
+    
+    // Get current user to check for existing image
+    const currentUser = await User.findById(userId);
+    
+    // Delete old image if exists
+    if (currentUser.image) {
+      const oldImagePath = path.join(__dirname, "../..", currentUser.image);
+      if (fs.existsSync(oldImagePath)) {
+        try {
+          fs.unlinkSync(oldImagePath);
+          console.log("[UploadImage] Old image deleted:", oldImagePath);
+        } catch (err) {
+          console.error("[UploadImage] Failed to delete old image:", err);
+        }
+      }
+    }
+    
+    // Construct the image URL. In production, this would be a full domain.
+    // We store the relative path for flexibility.
+    const imageUrl = `/uploads/profiles/${req.file.filename}`;
+
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { image: imageUrl },
+      { new: true }
+    ).select("-password");
+
+    res.json({
+      message: "Image uploaded successfully",
+      image: imageUrl,
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: formatRole(user.role),
+        image: user.image,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Upload failed", error: error.message });
+  }
+};
+
+// Remove profile image
+export const removeProfileImage = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Delete image file if exists
+    if (user.image) {
+      const imagePath = path.join(__dirname, "../..", user.image);
+      console.log("[RemoveImage] Attempting to delete:", imagePath);
+      
+      if (fs.existsSync(imagePath)) {
+        try {
+          fs.unlinkSync(imagePath);
+          console.log("[RemoveImage] Image file deleted successfully");
+        } catch (err) {
+          console.error("[RemoveImage] Failed to delete image file:", err);
+        }
+      } else {
+        console.log("[RemoveImage] Image file not found on disk");
+      }
+    }
+
+    // Update user record to remove image reference
+    user.image = null;
+    await user.save();
+
+    res.json({
+      message: "Profile image removed successfully",
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: formatRole(user.role),
+        image: null,
+      },
+    });
+  } catch (error) {
+    console.error("[RemoveImage] Error:", error);
+    res.status(500).json({ message: "Failed to remove image", error: error.message });
   }
 };

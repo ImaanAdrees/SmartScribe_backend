@@ -7,11 +7,15 @@ import { Server } from "socket.io";
 import bodyParser from "body-parser";
 import cookieParser from "cookie-parser";
 import { connect_db } from "./src/config/mongo_connection.js";
+import path from "path";
 import authRoutes from "./src/routes/authRoutes.js";
 import userRoutes from "./src/routes/userRoutes.js";
 import notificationRoutes from "./src/routes/notificationRoutes.js";
 
 const app=express();
+
+// Serve static files from uploads folder
+app.use("/uploads", express.static(path.join(path.resolve(), "uploads")));
 const server = createServer(app);
 
 // Initialize Socket.IO with CORS configuration

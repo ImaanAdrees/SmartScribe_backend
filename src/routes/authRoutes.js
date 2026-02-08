@@ -2,6 +2,7 @@ import express from "express";
 import { 
   signup, 
   login, 
+  logout,
   adminLogin, 
   adminLogout, 
   verifyAdmin,
@@ -24,6 +25,7 @@ const router = express.Router();
 // Public routes with rate limiting
 router.post("/signup", apiLimiter, validatePasswordStrength, signup);
 router.post("/login", apiLimiter, login);
+router.post("/logout", protect, logout);
 
 // User password change route (protected)
 router.post("/change-password", protect, changePassword);
