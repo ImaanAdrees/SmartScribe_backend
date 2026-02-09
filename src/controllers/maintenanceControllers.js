@@ -147,6 +147,11 @@ export const uploadAPK = async (req, res) => {
 
     await maintenance.save();
 
+    // Emit socket event for real-time update
+    if (io) {
+      io.emit("apk_list_updated");
+    }
+
     // Return populated version
     await maintenance.populate("apkVersions.uploadedBy", "name email");
 
@@ -485,9 +490,9 @@ export const getUpdateHistory = async (req, res) => {
         version: apk.version,
         date: apk.releaseDate,
         description: `Version ${apk.version} released`,
-        type: apk.improvements.length > 0 ? "Minor" : "Patch",
-        features: apk.features,
         improvements: apk.improvements,
+        type: apk.improvements.length > 0 ? "Minor" : (apk.bugFixes.length > 0 ? "Patch" : "No changes"),
+        features: apk.features,
         bugFixes: apk.bugFixes,
       }));
 
