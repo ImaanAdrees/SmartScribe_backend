@@ -11,6 +11,9 @@ import path from "path";
 import authRoutes from "./src/routes/authRoutes.js";
 import userRoutes from "./src/routes/userRoutes.js";
 import notificationRoutes from "./src/routes/notificationRoutes.js";
+import maintenanceRoutes from "./src/routes/maintenanceRoutes.js";
+import { initializeMaintenance } from "./src/controllers/maintenanceControllers.js";
+import { startBackupScheduler } from "./src/utils/backupScheduler.js";
 
 const app=express();
 
@@ -48,6 +51,11 @@ io.on("connection", (socket) => {
 });
 
 connect_db();
+// Initialize maintenance record
+initializeMaintenance();
+
+// Start Daily / Scheduled Backup Scheduler
+startBackupScheduler();
 
 
 app.use(bodyParser.json({ limit: '100mb' }));
@@ -79,6 +87,7 @@ app.set('trust proxy', 1);
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/maintenance", maintenanceRoutes);
 
 
 
