@@ -43,8 +43,8 @@ const server = createServer(app);
 
 // Initialize Socket.IO with CORS configuration
 const allowedOrigins = [
-    process.env.FRONT_URL,              // Next.js Web App (http://localhost:3000)
-    process.env.REACT_APP_FRONTEND_URL  // React Native App (http://localhost:8081)
+    process.env.FRONT_URL,             
+    process.env.REACT_APP_FRONTEND_URL || "http://localhost:8081"
 ].filter(Boolean);
 
 export const io = new Server(server, {
