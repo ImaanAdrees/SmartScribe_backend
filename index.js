@@ -17,6 +17,26 @@ import { startBackupScheduler } from "./src/utils/backupScheduler.js";
 
 const app=express();
 
+// Security middleware
+app.use(helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" }
+}));
+
+app.use(cors({
+    origin: (origin, callback) => {
+      
+        if (!origin) return callback(null, true);
+        
+        if (allowedOrigins.indexOf(origin) !== -1) {
+            callback(null, true);
+        } else {
+            console.log(`CORS blocked origin: ${origin}`);
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    credentials: true,
+}));
+
 // Serve static files from uploads folder
 app.use("/uploads", express.static(path.join(path.resolve(), "uploads")));
 const server = createServer(app);
@@ -60,26 +80,6 @@ startBackupScheduler();
 
 app.use(bodyParser.json({ limit: '100mb' }));
 app.use(bodyParser.urlencoded({ limit: '100mb', extended: true }));
-
-// Security middleware
-app.use(helmet({
-    crossOriginResourcePolicy: { policy: "cross-origin" }
-}));
-
-app.use(cors({
-    origin: (origin, callback) => {
-      
-        if (!origin) return callback(null, true);
-        
-        if (allowedOrigins.indexOf(origin) !== -1) {
-            callback(null, true);
-        } else {
-            console.log(`CORS blocked origin: ${origin}`);
-            callback(new Error('Not allowed by CORS'));
-        }
-    },
-    credentials: true,
-}));
 
 // Trust proxy to get real IP addresses (important for rate limiting)
 app.set('trust proxy', 1);

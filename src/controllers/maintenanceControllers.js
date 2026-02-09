@@ -4,6 +4,7 @@ import Maintenance from "../models/Maintenance.js";
 import Backup from "../models/Backup.js";
 import { performBackup } from "../utils/backupService.js";
 import { getNextBackupDate } from "../utils/backupUtils.js";
+import { io } from "../../index.js";
 
 // Initialize maintenance and backup records if not exist
 export const initializeMaintenance = async () => {
@@ -53,10 +54,17 @@ export const toggleMaintenanceMode = async (req, res) => {
         ? "Maintenance mode activated"
         : "Maintenance mode deactivated",
       data: {
-        maintenanceMode: maintenance.maintenanceMode,
         maintenanceMessage: maintenance.maintenanceMessage,
       },
     });
+
+    // Notify all connected clients
+    if (io) {
+      io.emit("maintenance_mode_changed", {
+        maintenanceMode: maintenance.maintenanceMode,
+        maintenanceMessage: maintenance.maintenanceMessage,
+      });
+    }
   } catch (error) {
     console.error("Error toggling maintenance mode:", error);
     res.status(500).json({
@@ -232,6 +240,44 @@ export const getLatestAPK = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Error fetching latest APK",
+      error: error.message,
+    });
+  }
+};
+
+// Get Public APK History (Sorted by Newest First)
+export const getPublicAPKHistory = async (req, res) => {
+  try {
+    const maintenance = await Maintenance.findOne().select("apkVersions");
+
+    if (!maintenance || !maintenance.apkVersions || maintenance.apkVersions.length === 0) {
+      return res.status(200).json({
+        success: true,
+        data: [],
+      });
+    }
+
+    const sortedVersions = maintenance.apkVersions
+      .sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt))
+      .map(apk => ({
+        version: apk.version,
+        features: apk.features,
+        improvements: apk.improvements,
+        bugFixes: apk.bugFixes,
+        uploadedAt: apk.uploadedAt,
+        releaseDate: apk.releaseDate,
+        filePath: apk.filePath
+      }));
+
+    res.status(200).json({
+      success: true,
+      data: sortedVersions,
+    });
+  } catch (error) {
+    console.error("Error fetching public APK history:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error fetching public APK history",
       error: error.message,
     });
   }
@@ -435,6 +481,7 @@ export const getUpdateHistory = async (req, res) => {
     const updateHistory = maintenance.apkVersions
       .sort((a, b) => new Date(b.releaseDate) - new Date(a.releaseDate))
       .map((apk) => ({
+        id: apk._id,
         version: apk.version,
         date: apk.releaseDate,
         description: `Version ${apk.version} released`,
@@ -527,6 +574,11 @@ export const deleteAPKVersion = async (req, res) => {
 
     maintenance.apkVersions.splice(apkIndex, 1);
     await maintenance.save();
+
+    // Emit socket event for real-time update
+    if (io) {
+      io.emit("apk_list_updated");
+    }
 
     res.status(200).json({
       success: true,

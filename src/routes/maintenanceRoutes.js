@@ -12,6 +12,7 @@ import {
   getUpdateHistory,
   getBackupHistory,
   deleteAPKVersion,
+  getPublicAPKHistory,
 } from "../controllers/maintenanceControllers.js";
 import { protect, adminOnly } from "../middleware/authMiddleware.js";
 import { apkUpload } from "../middleware/apkUploadMiddleware.js";
@@ -31,6 +32,7 @@ router.post("/upload-apk", protect, adminOnly, apkUpload.single("apk"), uploadAP
 router.get("/apk-versions", protect, adminOnly, getAPKVersions);
 router.get("/latest-apk", protect, adminOnly, getLatestAPK);
 router.get("/latest-apk-public", getLatestAPK); // Public endpoint for app to check latest version
+router.get("/public-apk-history", getPublicAPKHistory); // Public endpoint for demo page history
 router.delete("/apk-versions/:versionId", protect, adminOnly, deleteAPKVersion);
 
 // Backup Management
