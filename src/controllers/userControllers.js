@@ -2,6 +2,7 @@ import User from "../models/User.js";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { io } from "../../index.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -51,6 +52,11 @@ export const updateUserProfile = async (req, res) => {
 
     if (!user) {
       return res.status(404).json({ message: "User not found" });
+    }
+
+    // Emit socket event for real-time update
+    if (io) {
+      io.emit("user_list_updated");
     }
 
     res.json({
@@ -172,6 +178,11 @@ export const deleteUser = async (req, res) => {
 
     await User.deleteOne({ _id: id });
 
+    // Emit socket event for real-time update
+    if (io) {
+      io.emit("user_list_updated");
+    }
+
     res.json({ message: "User deleted" });
   } catch (error) {
     res.status(500).json({ message: "Failed to delete user", error: error.message });
@@ -212,6 +223,11 @@ export const uploadProfileImage = async (req, res) => {
       { image: imageUrl },
       { new: true }
     ).select("-password");
+
+    // Emit socket event for real-time update
+    if (io) {
+      io.emit("user_list_updated");
+    }
 
     res.json({
       message: "Image uploaded successfully",
@@ -259,6 +275,11 @@ export const removeProfileImage = async (req, res) => {
     // Update user record to remove image reference
     user.image = null;
     await user.save();
+
+    // Emit socket event for real-time update
+    if (io) {
+      io.emit("user_list_updated");
+    }
 
     res.json({
       message: "Profile image removed successfully",

@@ -2,6 +2,7 @@ import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 import AdminSession from "../models/AdminSession.js";
 import { logLoginAttempt } from "../middleware/securityMiddleware.js";
+import { io } from "../../index.js";
 
 // Generate different token expiry for admin vs regular users
 const generateToken = (id, isAdmin = false) => {
@@ -45,6 +46,11 @@ export const signup = async (req, res) => {
     }
 
     const user = await User.create({ name, email, password, role: normalizedRole });
+
+    // Emit socket event for real-time update
+    if (io) {
+      io.emit("user_list_updated");
+    }
 
     res.status(201).json({
       _id: user._id,
