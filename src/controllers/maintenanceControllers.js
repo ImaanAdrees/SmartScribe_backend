@@ -31,6 +31,9 @@ export const initializeMaintenance = async () => {
   }
 };
 
+// Store timeout reference to allow cancellation
+let maintenanceTimeout = null;
+
 // Toggle Maintenance Mode
 export const toggleMaintenanceMode = async (req, res) => {
   try {
@@ -41,30 +44,82 @@ export const toggleMaintenanceMode = async (req, res) => {
       maintenance = await Maintenance.create({});
     }
 
-    maintenance.maintenanceMode = maintenanceMode;
-    if (maintenanceMessage) {
-      maintenance.maintenanceMessage = maintenanceMessage;
+    // Clear any pending maintenance activation
+    if (maintenanceTimeout) {
+      clearTimeout(maintenanceTimeout);
+      maintenanceTimeout = null;
     }
 
-    await maintenance.save();
+    if (maintenanceMode) {
+      // --- ACTIVATING MAINTENANCE ---
+      // 1. Emit warning immediately (Client starts countdown)
+      if (io) {
+        io.emit("maintenance_warning", {
+          message: maintenanceMessage || "System maintenance starting in 30 seconds.",
+          duration: 30
+        });
+        console.log("Emitted maintenance_warning");
+      }
 
-    res.status(200).json({
-      success: true,
-      message: maintenanceMode
-        ? "Maintenance mode activated"
-        : "Maintenance mode deactivated",
-      data: {
-        maintenanceMessage: maintenance.maintenanceMessage,
-      },
-    });
+      // 2. Schedule actual activation after 30 seconds
+      maintenanceTimeout = setTimeout(async () => {
+        try {
+          maintenance.maintenanceMode = true;
+          if (maintenanceMessage) maintenance.maintenanceMessage = maintenanceMessage;
+          await maintenance.save();
 
-    // Notify all connected clients
-    if (io) {
-      io.emit("maintenance_mode_changed", {
-        maintenanceMode: maintenance.maintenanceMode,
-        maintenanceMessage: maintenance.maintenanceMessage,
+          if (io) {
+            io.emit("maintenance_mode_changed", {
+              maintenanceMode: true,
+              maintenanceMessage: maintenance.maintenanceMessage,
+            });
+            console.log("Maintenance mode ACTIVATED (delayed)");
+          }
+          maintenanceTimeout = null;
+        } catch (err) {
+          console.error("Error in delayed maintenance activation:", err);
+        }
+      }, 30000); // 30 seconds delay
+
+      // 3. Respond immediately to Admin
+      res.status(200).json({
+        success: true,
+        message: "Maintenance scheduled in 30 seconds",
+        data: {
+          maintenanceMessage: maintenanceMessage,
+          status: "pending_activation"
+        },
+      });
+
+    } else {
+      // --- DEACTIVATING MAINTENANCE ---
+      // Update immediately
+      maintenance.maintenanceMode = false;
+      if (maintenanceMessage) {
+        maintenance.maintenanceMessage = maintenanceMessage;
+      }
+
+      await maintenance.save();
+
+      // Notify clients immediately
+      if (io) {
+        io.emit("maintenance_mode_changed", {
+          maintenanceMode: false,
+          maintenanceMessage: maintenance.maintenanceMessage,
+        });
+        // Also emit warning clear just in case
+        io.emit("maintenance_warning_cleared"); 
+      }
+
+      res.status(200).json({
+        success: true,
+        message: "Maintenance mode deactivated",
+        data: {
+          maintenanceMessage: maintenance.maintenanceMessage,
+        },
       });
     }
+
   } catch (error) {
     console.error("Error toggling maintenance mode:", error);
     res.status(500).json({
