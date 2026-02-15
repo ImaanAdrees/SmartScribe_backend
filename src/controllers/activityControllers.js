@@ -46,7 +46,8 @@ export const logActivity = async (req, res) => {
     }
 
     // Extract IP and user agent
-    const ipAddress = req.headers["x-forwarded-for"] || req.connection.remoteAddress;
+    const ipAddress =
+      req.headers["x-forwarded-for"] || req.connection.remoteAddress;
     const userAgent = req.headers["user-agent"];
 
     // Log the activity
@@ -58,7 +59,7 @@ export const logActivity = async (req, res) => {
       description || null,
       metadata || {},
       ipAddress,
-      userAgent
+      userAgent,
     );
 
     res.status(201).json({
@@ -67,7 +68,9 @@ export const logActivity = async (req, res) => {
     });
   } catch (error) {
     console.error("Error logging activity:", error.message);
-    res.status(500).json({ message: "Failed to log activity", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Failed to log activity", error: error.message });
   }
 };
 
@@ -77,7 +80,15 @@ export const logActivity = async (req, res) => {
  */
 export const getActivityLogs = async (req, res) => {
   try {
-    const { limit = 50, skip = 0, userId, action, startDate, endDate, userEmail } = req.query;
+    const {
+      limit = 50,
+      skip = 0,
+      userId,
+      action,
+      startDate,
+      endDate,
+      userEmail,
+    } = req.query;
 
     const filters = {
       userId,
@@ -87,7 +98,11 @@ export const getActivityLogs = async (req, res) => {
       endDate,
     };
 
-    const { activities, total } = await getUserActivityLogs(filters, limit, skip);
+    const { activities, total } = await getUserActivityLogs(
+      filters,
+      limit,
+      skip,
+    );
 
     // Format activities for response
     const formattedActivities = activities.map((log) => ({
@@ -108,7 +123,9 @@ export const getActivityLogs = async (req, res) => {
     });
   } catch (error) {
     console.error("Error fetching activity logs:", error.message);
-    res.status(500).json({ message: "Failed to fetch activity logs", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Failed to fetch activity logs", error: error.message });
   }
 };
 
@@ -132,7 +149,9 @@ export const getActivityStatistics = async (req, res) => {
     });
   } catch (error) {
     console.error("Error fetching activity statistics:", error.message);
-    res.status(500).json({ message: "Failed to fetch statistics", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Failed to fetch statistics", error: error.message });
   }
 };
 
@@ -144,7 +163,10 @@ export const getTopUsers = async (req, res) => {
   try {
     const { limit = 5, daysBack = 30 } = req.query;
 
-    const topUsers = await getTopActiveUsers(parseInt(limit), parseInt(daysBack));
+    const topUsers = await getTopActiveUsers(
+      parseInt(limit),
+      parseInt(daysBack),
+    );
 
     res.json({
       topUsers: topUsers.map((user, idx) => ({
@@ -161,7 +183,9 @@ export const getTopUsers = async (req, res) => {
     });
   } catch (error) {
     console.error("Error fetching top users:", error.message);
-    res.status(500).json({ message: "Failed to fetch top users", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Failed to fetch top users", error: error.message });
   }
 };
 
@@ -219,7 +243,9 @@ export const getActivitySummary = async (req, res) => {
     });
   } catch (error) {
     console.error("Error fetching activity summary:", error.message);
-    res.status(500).json({ message: "Failed to fetch summary", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Failed to fetch summary", error: error.message });
   }
 };
 
@@ -238,7 +264,11 @@ export const getUserActivities = async (req, res) => {
     }
 
     const filters = { userId };
-    const { activities, total } = await getUserActivityLogs(filters, limit, skip);
+    const { activities, total } = await getUserActivityLogs(
+      filters,
+      limit,
+      skip,
+    );
 
     const formattedActivities = activities.map((log) => ({
       _id: log._id,
@@ -256,6 +286,8 @@ export const getUserActivities = async (req, res) => {
     });
   } catch (error) {
     console.error("Error fetching user activities:", error.message);
-    res.status(500).json({ message: "Failed to fetch activities", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Failed to fetch activities", error: error.message });
   }
 };

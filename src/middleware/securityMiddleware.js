@@ -6,7 +6,8 @@ export const adminLoginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 5, // Limit each IP to 5 requests per windowMs
   message: {
-    message: "Too many login attempts from this IP, please try again after 15 minutes",
+    message:
+      "Too many login attempts from this IP, please try again after 15 minutes",
   },
   standardHeaders: true,
   legacyHeaders: false,
@@ -39,7 +40,7 @@ export const checkAccountLockout = async (req, res, next) => {
   try {
     // Check failed login attempts in last 30 minutes
     const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
-    
+
     const failedAttempts = await LoginAttempt.countDocuments({
       email: email.toLowerCase(),
       success: false,
@@ -59,7 +60,8 @@ export const checkAccountLockout = async (req, res, next) => {
 
       if (!lastSuccessfulLogin) {
         return res.status(423).json({
-          message: "Account temporarily locked due to multiple failed login attempts. Please try again after 30 minutes.",
+          message:
+            "Account temporarily locked due to multiple failed login attempts. Please try again after 30 minutes.",
           lockedUntil: new Date(Date.now() + 30 * 60 * 1000),
         });
       }

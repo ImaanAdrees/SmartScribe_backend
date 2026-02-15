@@ -19,10 +19,13 @@ const userNotificationSchema = new mongoose.Schema(
       default: false,
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 // Index to prevent duplicates and enable efficient querying
-userNotificationSchema.index({ userId: 1, notificationId: 1 }, { unique: true });
+userNotificationSchema.index(
+  { userId: 1, notificationId: 1 },
+  { unique: true },
+);
 
 export default mongoose.model("UserNotification", userNotificationSchema);

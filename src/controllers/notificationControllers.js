@@ -75,23 +75,32 @@ export const getRecipientCount = async (req, res) => {
         : String(targetUserIdsParam).split(",");
 
       if (targetUserIds.length === 0) {
-        return res.status(400).json({ message: "At least one user ID is required" });
+        return res
+          .status(400)
+          .json({ message: "At least one user ID is required" });
       }
     }
 
-    const count = await User.countDocuments(buildAudienceQuery(audience, targetUserIds));
+    const count = await User.countDocuments(
+      buildAudienceQuery(audience, targetUserIds),
+    );
     res.json({ count });
   } catch (error) {
-    res.status(500).json({ message: "Failed to get recipient count", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Failed to get recipient count", error: error.message });
   }
 };
 
 export const createNotification = async (req, res) => {
   try {
-    const { title, message, type, audience, targetUserIds, scheduledAt } = req.body;
+    const { title, message, type, audience, targetUserIds, scheduledAt } =
+      req.body;
 
     if (!title || !message) {
-      return res.status(400).json({ message: "Title and message are required" });
+      return res
+        .status(400)
+        .json({ message: "Title and message are required" });
     }
 
     const normalizedType = normalizeType(type);
@@ -106,8 +115,14 @@ export const createNotification = async (req, res) => {
 
     let userIds = [];
     if (normalizedAudience === "user") {
-      if (!targetUserIds || !Array.isArray(targetUserIds) || targetUserIds.length === 0) {
-        return res.status(400).json({ message: "At least one user must be selected" });
+      if (
+        !targetUserIds ||
+        !Array.isArray(targetUserIds) ||
+        targetUserIds.length === 0
+      ) {
+        return res
+          .status(400)
+          .json({ message: "At least one user must be selected" });
       }
       userIds = targetUserIds;
 
@@ -129,7 +144,7 @@ export const createNotification = async (req, res) => {
     const now = new Date();
     const isScheduled = scheduledDate && scheduledDate > now;
     const recipientCount = await User.countDocuments(
-      buildAudienceQuery(normalizedAudience, userIds)
+      buildAudienceQuery(normalizedAudience, userIds),
     );
 
     const notification = await Notification.create({
@@ -147,7 +162,11 @@ export const createNotification = async (req, res) => {
 
     // Emit real-time notification via Socket.IO if notification is sent immediately
     if (!isScheduled) {
-      await emitNotificationViaSocket(notification, normalizedAudience, userIds);
+      await emitNotificationViaSocket(
+        notification,
+        normalizedAudience,
+        userIds,
+      );
     }
 
     res.status(201).json({
@@ -156,19 +175,28 @@ export const createNotification = async (req, res) => {
       message: notification.message,
       type: notification.type,
       audience: notification.audience,
-      audienceLabel: normalizedAudience === "user" ? `${userIds.length} user(s) selected` : "Specific User",
+      audienceLabel:
+        normalizedAudience === "user"
+          ? `${userIds.length} user(s) selected`
+          : "Specific User",
       sentDate: notification.sentAt,
       scheduledAt: notification.scheduledAt,
       status: notification.status,
       recipientCount: notification.recipientCount,
     });
   } catch (error) {
-    res.status(500).json({ message: "Failed to create notification", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Failed to create notification", error: error.message });
   }
 };
 
 // Helper function to emit notifications via Socket.IO and store in database
-const emitNotificationViaSocket = async (notification, audience, targetUserIds) => {
+const emitNotificationViaSocket = async (
+  notification,
+  audience,
+  targetUserIds,
+) => {
   try {
     const notificationPayload = {
       id: notification._id,
@@ -187,7 +215,9 @@ const emitNotificationViaSocket = async (notification, audience, targetUserIds) 
     if (audience === "all") {
       // Get all non-admin users
       usersToNotify = await User.find({ isAdmin: false }).select("_id");
-      console.log(`[Notification] Sending to ALL users. Count: ${usersToNotify.length}`);
+      console.log(
+        `[Notification] Sending to ALL users. Count: ${usersToNotify.length}`,
+      );
       usersToNotify.forEach((user) => {
         const roomName = `user_${user._id}`;
         console.log(`[Notification] Emitting to room: ${roomName}`);
@@ -196,24 +226,42 @@ const emitNotificationViaSocket = async (notification, audience, targetUserIds) 
     }
     // Emit to students only
     else if (audience === "students") {
-      usersToNotify = await User.find({ isAdmin: false, role: "student" }).select("_id");
-      console.log(`[Notification] Sending to STUDENTS. Count: ${usersToNotify.length}`);
+      usersToNotify = await User.find({
+        isAdmin: false,
+        role: "student",
+      }).select("_id");
+      console.log(
+        `[Notification] Sending to STUDENTS. Count: ${usersToNotify.length}`,
+      );
       usersToNotify.forEach((student) => {
-        io.to(`user_${student._id}`).emit("new_notification", notificationPayload);
+        io.to(`user_${student._id}`).emit(
+          "new_notification",
+          notificationPayload,
+        );
       });
     }
     // Emit to teachers only
     else if (audience === "teachers") {
-      usersToNotify = await User.find({ isAdmin: false, role: "teacher" }).select("_id");
-      console.log(`[Notification] Sending to TEACHERS. Count: ${usersToNotify.length}`);
+      usersToNotify = await User.find({
+        isAdmin: false,
+        role: "teacher",
+      }).select("_id");
+      console.log(
+        `[Notification] Sending to TEACHERS. Count: ${usersToNotify.length}`,
+      );
       usersToNotify.forEach((teacher) => {
-        io.to(`user_${teacher._id}`).emit("new_notification", notificationPayload);
+        io.to(`user_${teacher._id}`).emit(
+          "new_notification",
+          notificationPayload,
+        );
       });
     }
     // Emit to specific users
     else if (audience === "user" && targetUserIds && targetUserIds.length > 0) {
       usersToNotify = targetUserIds.map((id) => ({ _id: id }));
-      console.log(`[Notification] Sending to SPECIFIC USERS. Count: ${usersToNotify.length}`);
+      console.log(
+        `[Notification] Sending to SPECIFIC USERS. Count: ${usersToNotify.length}`,
+      );
       targetUserIds.forEach((userId) => {
         io.to(`user_${userId}`).emit("new_notification", notificationPayload);
       });
@@ -227,25 +275,36 @@ const emitNotificationViaSocket = async (notification, audience, targetUserIds) 
         isRead: false,
       }));
 
-      console.log(`[Notification] Storing ${userNotificationRecords.length} records in UserNotification`);
-      
-      const result = await UserNotification.insertMany(userNotificationRecords, { ordered: false }).catch(
-        (err) => {
-          // Ignore duplicate key errors
-          if (err.code !== 11000) {
-            console.error("[Notification] Error inserting records:", err);
-            throw err;
-          }
-          console.warn("[Notification] Duplicate key errors (expected for retries)");
-        }
+      console.log(
+        `[Notification] Storing ${userNotificationRecords.length} records in UserNotification`,
       );
-      
-      console.log(`[Notification] Successfully stored notifications. Result:`, result?.length);
+
+      const result = await UserNotification.insertMany(
+        userNotificationRecords,
+        { ordered: false },
+      ).catch((err) => {
+        // Ignore duplicate key errors
+        if (err.code !== 11000) {
+          console.error("[Notification] Error inserting records:", err);
+          throw err;
+        }
+        console.warn(
+          "[Notification] Duplicate key errors (expected for retries)",
+        );
+      });
+
+      console.log(
+        `[Notification] Successfully stored notifications. Result:`,
+        result?.length,
+      );
     } else {
       console.warn("[Notification] No users to notify!");
     }
   } catch (error) {
-    console.error("[Notification] Error emitting notification via Socket.IO:", error);
+    console.error(
+      "[Notification] Error emitting notification via Socket.IO:",
+      error,
+    );
   }
 };
 
@@ -260,7 +319,8 @@ export const listNotifications = async (req, res) => {
       let displayLabel = "";
       if (notif.audience === "user") {
         const count = notif.targetUserIds ? notif.targetUserIds.length : 0;
-        displayLabel = count > 0 ? `${count} user(s) selected` : "Specific User";
+        displayLabel =
+          count > 0 ? `${count} user(s) selected` : "Specific User";
       } else {
         displayLabel = audienceLabel(notif.audience, null);
       }
@@ -280,7 +340,9 @@ export const listNotifications = async (req, res) => {
 
     res.json({ notifications: payload });
   } catch (error) {
-    res.status(500).json({ message: "Failed to load notifications", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Failed to load notifications", error: error.message });
   }
 };
 
@@ -314,11 +376,18 @@ export const getUserNotifications = async (req, res) => {
         tag: un.notificationId.tag || "SmartScribe",
       }));
 
-    console.log(`[API] Returning ${notifications.length} formatted notifications`);
+    console.log(
+      `[API] Returning ${notifications.length} formatted notifications`,
+    );
     res.json({ notifications });
   } catch (error) {
     console.error(`[API] Error fetching user notifications:`, error);
-    res.status(500).json({ message: "Failed to load user notifications", error: error.message });
+    res
+      .status(500)
+      .json({
+        message: "Failed to load user notifications",
+        error: error.message,
+      });
   }
 };
 
@@ -328,7 +397,9 @@ export const markNotificationAsRead = async (req, res) => {
     const userId = req.user._id;
     const { notificationId } = req.params;
 
-    console.log(`[MarkAsRead] userId: ${userId}, notificationId: ${notificationId}`);
+    console.log(
+      `[MarkAsRead] userId: ${userId}, notificationId: ${notificationId}`,
+    );
 
     // Convert notificationId string to ObjectId
     const notifId = new mongoose.Types.ObjectId(notificationId);
@@ -339,10 +410,15 @@ export const markNotificationAsRead = async (req, res) => {
       notificationId: notifId,
     });
 
-    console.log(`[MarkAsRead] Found notification:`, userNotification ? 'Yes' : 'No');
+    console.log(
+      `[MarkAsRead] Found notification:`,
+      userNotification ? "Yes" : "No",
+    );
 
     if (!userNotification) {
-      return res.status(404).json({ message: "Notification not found for this user" });
+      return res
+        .status(404)
+        .json({ message: "Notification not found for this user" });
     }
 
     // Mark as read
@@ -353,7 +429,12 @@ export const markNotificationAsRead = async (req, res) => {
     res.json({ message: "Notification marked as read" });
   } catch (error) {
     console.error(`[MarkAsRead] Error:`, error);
-    res.status(500).json({ message: "Failed to mark notification as read", error: error.message });
+    res
+      .status(500)
+      .json({
+        message: "Failed to mark notification as read",
+        error: error.message,
+      });
   }
 };
 
@@ -363,7 +444,9 @@ export const deleteUserNotification = async (req, res) => {
     const userId = req.user._id;
     const { notificationId } = req.params;
 
-    console.log(`[DeleteNotification] userId: ${userId}, notificationId: ${notificationId}`);
+    console.log(
+      `[DeleteNotification] userId: ${userId}, notificationId: ${notificationId}`,
+    );
 
     // Convert notificationId string to ObjectId
     const notifId = new mongoose.Types.ObjectId(notificationId);
@@ -374,18 +457,24 @@ export const deleteUserNotification = async (req, res) => {
       notificationId: notifId,
     });
 
-    console.log(`[DeleteNotification] Delete result:`, result ? 'Success' : 'Not Found');
+    console.log(
+      `[DeleteNotification] Delete result:`,
+      result ? "Success" : "Not Found",
+    );
 
     if (!result) {
       console.warn(`[DeleteNotification] Notification not found for user`);
-      return res.status(404).json({ message: "Notification not found for this user" });
+      return res
+        .status(404)
+        .json({ message: "Notification not found for this user" });
     }
 
     console.log(`[DeleteNotification] Notification deleted successfully`);
     res.json({ message: "Notification deleted successfully" });
   } catch (error) {
     console.error(`[DeleteNotification] Error:`, error);
-    res.status(500).json({ message: "Failed to delete notification", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Failed to delete notification", error: error.message });
   }
 };
-

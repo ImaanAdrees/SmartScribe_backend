@@ -78,7 +78,7 @@ const maintenanceSchema = new mongoose.Schema(
       default: "34%",
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 export default mongoose.model("Maintenance", maintenanceSchema);

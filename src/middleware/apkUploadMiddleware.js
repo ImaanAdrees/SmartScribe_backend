@@ -39,9 +39,9 @@ const fileFilter = (req, file, cb) => {
   } else {
     cb(
       new Error(
-        "Only APK and IPA files are allowed! File must be .apk or .ipa"
+        "Only APK and IPA files are allowed! File must be .apk or .ipa",
       ),
-      false
+      false,
     );
   }
 };

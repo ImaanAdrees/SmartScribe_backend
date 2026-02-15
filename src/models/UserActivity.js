@@ -58,7 +58,7 @@ const userActivitySchema = new mongoose.Schema(
       default: Date.now,
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 // Indexes for faster queries

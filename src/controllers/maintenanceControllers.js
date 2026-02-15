@@ -55,8 +55,9 @@ export const toggleMaintenanceMode = async (req, res) => {
       // 1. Emit warning immediately (Client starts countdown)
       if (io) {
         io.emit("maintenance_warning", {
-          message: maintenanceMessage || "System maintenance starting in 30 seconds.",
-          duration: 30
+          message:
+            maintenanceMessage || "System maintenance starting in 30 seconds.",
+          duration: 30,
         });
         console.log("Emitted maintenance_warning");
       }
@@ -65,7 +66,8 @@ export const toggleMaintenanceMode = async (req, res) => {
       maintenanceTimeout = setTimeout(async () => {
         try {
           maintenance.maintenanceMode = true;
-          if (maintenanceMessage) maintenance.maintenanceMessage = maintenanceMessage;
+          if (maintenanceMessage)
+            maintenance.maintenanceMessage = maintenanceMessage;
           await maintenance.save();
 
           if (io) {
@@ -87,10 +89,9 @@ export const toggleMaintenanceMode = async (req, res) => {
         message: "Maintenance scheduled in 30 seconds",
         data: {
           maintenanceMessage: maintenanceMessage,
-          status: "pending_activation"
+          status: "pending_activation",
         },
       });
-
     } else {
       // --- DEACTIVATING MAINTENANCE ---
       // Update immediately
@@ -108,7 +109,7 @@ export const toggleMaintenanceMode = async (req, res) => {
           maintenanceMessage: maintenance.maintenanceMessage,
         });
         // Also emit warning clear just in case
-        io.emit("maintenance_warning_cleared"); 
+        io.emit("maintenance_warning_cleared");
       }
 
       res.status(200).json({
@@ -119,7 +120,6 @@ export const toggleMaintenanceMode = async (req, res) => {
         },
       });
     }
-
   } catch (error) {
     console.error("Error toggling maintenance mode:", error);
     res.status(500).json({
@@ -238,7 +238,7 @@ export const getAPKVersions = async (req, res) => {
   try {
     const maintenance = await Maintenance.findOne().populate(
       "apkVersions.uploadedBy",
-      "name email"
+      "name email",
     );
 
     if (!maintenance || !maintenance.apkVersions) {
@@ -251,7 +251,7 @@ export const getAPKVersions = async (req, res) => {
 
     // Sort by upload date (newest first)
     const sortedVersions = maintenance.apkVersions.sort(
-      (a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt)
+      (a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt),
     );
 
     res.status(200).json({
@@ -274,10 +274,14 @@ export const getLatestAPK = async (req, res) => {
   try {
     const maintenance = await Maintenance.findOne().populate(
       "apkVersions.uploadedBy",
-      "name email"
+      "name email",
     );
 
-    if (!maintenance || !maintenance.apkVersions || maintenance.apkVersions.length === 0) {
+    if (
+      !maintenance ||
+      !maintenance.apkVersions ||
+      maintenance.apkVersions.length === 0
+    ) {
       return res.status(200).json({
         success: true,
         data: null,
@@ -310,7 +314,11 @@ export const getPublicAPKHistory = async (req, res) => {
   try {
     const maintenance = await Maintenance.findOne().select("apkVersions");
 
-    if (!maintenance || !maintenance.apkVersions || maintenance.apkVersions.length === 0) {
+    if (
+      !maintenance ||
+      !maintenance.apkVersions ||
+      maintenance.apkVersions.length === 0
+    ) {
       return res.status(200).json({
         success: true,
         data: [],
@@ -319,14 +327,14 @@ export const getPublicAPKHistory = async (req, res) => {
 
     const sortedVersions = maintenance.apkVersions
       .sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt))
-      .map(apk => ({
+      .map((apk) => ({
         version: apk.version,
         features: apk.features,
         improvements: apk.improvements,
         bugFixes: apk.bugFixes,
         uploadedAt: apk.uploadedAt,
         releaseDate: apk.releaseDate,
-        filePath: apk.filePath
+        filePath: apk.filePath,
       }));
 
     res.status(200).json({
@@ -377,16 +385,16 @@ export const updateBackupConfig = async (req, res) => {
 
     // Calculate next backup date
     if (backup.autoBackupEnabled) {
-        const backupConfig = {
-          backupTime: backup.backupTime,
-          backupFrequency: backup.backupFrequency,
-          backupDay: backup.backupDay,
-        };
-        backup.nextScheduledBackup = getNextBackupDate(backupConfig);
+      const backupConfig = {
+        backupTime: backup.backupTime,
+        backupFrequency: backup.backupFrequency,
+        backupDay: backup.backupDay,
+      };
+      backup.nextScheduledBackup = getNextBackupDate(backupConfig);
     } else if (backup.oneTimeBackupEnabled && backup.oneTimeScheduledBackup) {
-        backup.nextScheduledBackup = backup.oneTimeScheduledBackup;
+      backup.nextScheduledBackup = backup.oneTimeScheduledBackup;
     } else {
-        backup.nextScheduledBackup = null;
+      backup.nextScheduledBackup = null;
     }
 
     await backup.save();
@@ -453,7 +461,7 @@ export const getBackupConfig = async (req, res) => {
 export const triggerBackup = async (req, res) => {
   try {
     const newBackup = await performBackup(req.user._id, "manual");
-    
+
     // Fetch updated backup config for nextScheduledBackup
     const backup = await Backup.findOne();
 
@@ -496,9 +504,11 @@ export const getSystemInfo = async (req, res) => {
       database: maintenance.database,
       maintenanceMode: maintenance.maintenanceMode,
       lastBackupDate: backup.lastBackupDate,
-      nextScheduledBackup: backup.autoBackupEnabled 
-        ? backup.nextScheduledBackup 
-        : (backup.oneTimeBackupEnabled ? backup.oneTimeScheduledBackup : null),
+      nextScheduledBackup: backup.autoBackupEnabled
+        ? backup.nextScheduledBackup
+        : backup.oneTimeBackupEnabled
+          ? backup.oneTimeScheduledBackup
+          : null,
       backupConfig: {
         autoBackupEnabled: backup.autoBackupEnabled,
         backupFrequency: backup.backupFrequency,
@@ -528,7 +538,7 @@ export const getUpdateHistory = async (req, res) => {
   try {
     const maintenance = await Maintenance.findOne().populate(
       "apkVersions.uploadedBy",
-      "name email"
+      "name email",
     );
 
     if (!maintenance || !maintenance.apkVersions) {
@@ -546,7 +556,12 @@ export const getUpdateHistory = async (req, res) => {
         date: apk.releaseDate,
         description: `Version ${apk.version} released`,
         improvements: apk.improvements,
-        type: apk.improvements.length > 0 ? "Minor" : (apk.bugFixes.length > 0 ? "Patch" : "No changes"),
+        type:
+          apk.improvements.length > 0
+            ? "Minor"
+            : apk.bugFixes.length > 0
+              ? "Patch"
+              : "No changes",
         features: apk.features,
         bugFixes: apk.bugFixes,
       }));
@@ -571,7 +586,7 @@ export const getBackupHistory = async (req, res) => {
   try {
     const backup = await Backup.findOne().populate(
       "backupHistory.triggeredBy",
-      "name email"
+      "name email",
     );
 
     if (!backup || !backup.backupHistory) {
@@ -582,7 +597,7 @@ export const getBackupHistory = async (req, res) => {
     }
 
     const backupHistory = backup.backupHistory.sort(
-      (a, b) => new Date(b.backupDate) - new Date(a.backupDate)
+      (a, b) => new Date(b.backupDate) - new Date(a.backupDate),
     );
 
     res.status(200).json({
@@ -614,7 +629,7 @@ export const deleteAPKVersion = async (req, res) => {
     }
 
     const apkIndex = maintenance.apkVersions.findIndex(
-      (apk) => apk._id.toString() === versionId
+      (apk) => apk._id.toString() === versionId,
     );
 
     if (apkIndex === -1) {

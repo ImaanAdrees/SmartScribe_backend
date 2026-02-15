@@ -31,7 +31,9 @@ export const getUserProfile = async (req, res) => {
       image: user.image,
     });
   } catch (error) {
-    res.status(500).json({ message: "Failed to fetch profile", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Failed to fetch profile", error: error.message });
   }
 };
 
@@ -42,13 +44,15 @@ export const updateUserProfile = async (req, res) => {
     const { name, image } = req.body;
 
     if (!name || name.trim().length < 3) {
-      return res.status(400).json({ message: "Name must be at least 3 characters" });
+      return res
+        .status(400)
+        .json({ message: "Name must be at least 3 characters" });
     }
 
     const user = await User.findByIdAndUpdate(
       userId,
       { name: name.trim(), ...(image && { image }) },
-      { new: true, runValidators: true }
+      { new: true, runValidators: true },
     ).select("-password");
 
     if (!user) {
@@ -56,9 +60,19 @@ export const updateUserProfile = async (req, res) => {
     }
 
     // Log user activity
-    const ipAddress = req.headers["x-forwarded-for"] || req.connection.remoteAddress;
+    const ipAddress =
+      req.headers["x-forwarded-for"] || req.connection.remoteAddress;
     const userAgent = req.headers["user-agent"];
-await logUserActivity(user._id, user.email, user.name, "Profile Updated", "Updated profile information", { name }, ipAddress, userAgent);
+    await logUserActivity(
+      user._id,
+      user.email,
+      user.name,
+      "Profile Updated",
+      "Updated profile information",
+      { name },
+      ipAddress,
+      userAgent,
+    );
 
     // Emit socket event for real-time update
     if (io) {
@@ -76,7 +90,9 @@ await logUserActivity(user._id, user.email, user.name, "Profile Updated", "Updat
       },
     });
   } catch (error) {
-    res.status(500).json({ message: "Failed to update profile", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Failed to update profile", error: error.message });
   }
 };
 
@@ -142,7 +158,9 @@ export const changePassword = async (req, res) => {
 
     res.json({ message: "Password changed successfully" });
   } catch (error) {
-    res.status(500).json({ message: "Failed to change password", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Failed to change password", error: error.message });
   }
 };
 
@@ -158,13 +176,19 @@ export const listUsers = async (req, res) => {
       name: user.name || "Unknown",
       email: user.email,
       role: formatRole(user.role),
-      joinDate: user.createdAt ? user.createdAt.toISOString().split("T")[0] : null,
-      transcriptions: Number.isFinite(user.transcriptions) ? user.transcriptions : 0,
+      joinDate: user.createdAt
+        ? user.createdAt.toISOString().split("T")[0]
+        : null,
+      transcriptions: Number.isFinite(user.transcriptions)
+        ? user.transcriptions
+        : 0,
     }));
 
     res.json({ users: payload });
   } catch (error) {
-    res.status(500).json({ message: "Failed to load users", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Failed to load users", error: error.message });
   }
 };
 
@@ -191,7 +215,9 @@ export const deleteUser = async (req, res) => {
 
     res.json({ message: "User deleted" });
   } catch (error) {
-    res.status(500).json({ message: "Failed to delete user", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Failed to delete user", error: error.message });
   }
 };
 
@@ -203,10 +229,10 @@ export const uploadProfileImage = async (req, res) => {
     }
 
     const userId = req.user.id;
-    
+
     // Get current user to check for existing image
     const currentUser = await User.findById(userId);
-    
+
     // Delete old image if exists
     if (currentUser.image) {
       const oldImagePath = path.join(__dirname, "../..", currentUser.image);
@@ -219,7 +245,7 @@ export const uploadProfileImage = async (req, res) => {
         }
       }
     }
-    
+
     // Construct the image URL. In production, this would be a full domain.
     // We store the relative path for flexibility.
     const imageUrl = `/uploads/profiles/${req.file.filename}`;
@@ -227,7 +253,7 @@ export const uploadProfileImage = async (req, res) => {
     const user = await User.findByIdAndUpdate(
       userId,
       { image: imageUrl },
-      { new: true }
+      { new: true },
     ).select("-password");
 
     // Emit socket event for real-time update
@@ -265,7 +291,7 @@ export const removeProfileImage = async (req, res) => {
     if (user.image) {
       const imagePath = path.join(__dirname, "../..", user.image);
       console.log("[RemoveImage] Attempting to delete:", imagePath);
-      
+
       if (fs.existsSync(imagePath)) {
         try {
           fs.unlinkSync(imagePath);
@@ -299,6 +325,8 @@ export const removeProfileImage = async (req, res) => {
     });
   } catch (error) {
     console.error("[RemoveImage] Error:", error);
-    res.status(500).json({ message: "Failed to remove image", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Failed to remove image", error: error.message });
   }
 };

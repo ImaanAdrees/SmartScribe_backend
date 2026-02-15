@@ -5,7 +5,10 @@ import { getNextBackupDate } from "./backupUtils.js";
  * Performs the actual backup process.
  * currently simulating backup as per existing code.
  */
-export const performBackup = async (triggeredBy = null, backupType = "automatic") => {
+export const performBackup = async (
+  triggeredBy = null,
+  backupType = "automatic",
+) => {
   try {
     let backup = await Backup.findOne();
     if (!backup) {
@@ -30,18 +33,18 @@ export const performBackup = async (triggeredBy = null, backupType = "automatic"
 
     // Refresh next scheduled backup if it's automatic
     if (backup.autoBackupEnabled) {
-        const backupConfig = {
-          backupTime: backup.backupTime,
-          backupFrequency: backup.backupFrequency,
-          backupDay: backup.backupDay,
-        };
-        backup.nextScheduledBackup = getNextBackupDate(backupConfig);
+      const backupConfig = {
+        backupTime: backup.backupTime,
+        backupFrequency: backup.backupFrequency,
+        backupDay: backup.backupDay,
+      };
+      backup.nextScheduledBackup = getNextBackupDate(backupConfig);
     }
 
     // If it was a one-time backup, disable it after completion
     if (backupType === "manual" && backup.oneTimeBackupEnabled) {
-        backup.oneTimeBackupEnabled = false;
-        backup.oneTimeScheduledBackup = null;
+      backup.oneTimeBackupEnabled = false;
+      backup.oneTimeScheduledBackup = null;
     }
 
     await backup.save();

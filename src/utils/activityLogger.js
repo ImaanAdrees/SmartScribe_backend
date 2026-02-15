@@ -19,7 +19,7 @@ export const logUserActivity = async (
   description = null,
   metadata = {},
   ipAddress = null,
-  userAgent = null
+  userAgent = null,
 ) => {
   try {
     const activity = await UserActivity.create({
@@ -45,7 +45,11 @@ export const logUserActivity = async (
  * @param {Number} limit - Pagination limit
  * @param {Number} skip - Pagination skip
  */
-export const getUserActivityLogs = async (filters = {}, limit = 50, skip = 0) => {
+export const getUserActivityLogs = async (
+  filters = {},
+  limit = 50,
+  skip = 0,
+) => {
   try {
     const query = {};
 
