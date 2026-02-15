@@ -24,10 +24,12 @@ const notificationSchema = new mongoose.Schema(
       enum: ["all", "students", "teachers", "user"],
       default: "all",
     },
-    targetUserIds: [{
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-    }],
+    targetUserIds: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
     recipientCount: {
       type: Number,
       default: 0,
@@ -50,8 +52,13 @@ const notificationSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
+    tag: {
+      type: String,
+      default: "SmartScribe",
+      trim: true,
+    },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 export default mongoose.model("Notification", notificationSchema);

@@ -27,7 +27,7 @@ const adminSessionSchema = new mongoose.Schema(
       default: true,
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 // Index for faster queries

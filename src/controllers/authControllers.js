@@ -2,6 +2,8 @@ import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 import AdminSession from "../models/AdminSession.js";
 import { logLoginAttempt } from "../middleware/securityMiddleware.js";
+import { logUserActivity } from "../utils/activityLogger.js";
+import { io } from "../../index.js";
 
 // Generate different token expiry for admin vs regular users
 const generateToken = (id, isAdmin = false) => {
@@ -44,7 +46,17 @@ export const signup = async (req, res) => {
       return res.status(400).json({ message: "User already exists" });
     }
 
-    const user = await User.create({ name, email, password, role: normalizedRole });
+    const user = await User.create({
+      name,
+      email,
+      password,
+      role: normalizedRole,
+    });
+
+    // Emit socket event for real-time update
+    if (io) {
+      io.emit("user_list_updated");
+    }
 
     res.status(201).json({
       _id: user._id,
@@ -54,7 +66,9 @@ export const signup = async (req, res) => {
       token: generateToken(user._id, false),
     });
   } catch (error) {
-    res.status(500).json({ message: "Error creating user", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Error creating user", error: error.message });
   }
 };
 
@@ -64,10 +78,25 @@ export const login = async (req, res) => {
 
   try {
     const user = await User.findOne({ email });
-    
+
     if (user && (await user.matchPassword(password))) {
       await logLoginAttempt(req, true, "user");
-      
+
+      // Log user activity
+      const ipAddress =
+        req.headers["x-forwarded-for"] || req.connection.remoteAddress;
+      const userAgent = req.headers["user-agent"];
+      await logUserActivity(
+        user._id,
+        user.email,
+        user.name,
+        "Login",
+        null,
+        {},
+        ipAddress,
+        userAgent,
+      );
+
       res.json({
         _id: user._id,
         email: user.email,
@@ -95,14 +124,14 @@ export const adminLogin = async (req, res) => {
     if (admin && (await admin.matchPassword(password))) {
       // Generate admin token
       const token = generateToken(admin._id, true);
-      
+
       // Calculate expiration (2 hours from now)
       const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000);
 
       // Invalidate old sessions for this admin
       await AdminSession.updateMany(
         { adminId: admin._id, isActive: true },
-        { isActive: false }
+        { isActive: false },
       );
 
       // Create new admin session
@@ -118,7 +147,9 @@ export const adminLogin = async (req, res) => {
       // Log successful attempt
       await logLoginAttempt(req, true, "admin");
 
-      console.log(`Admin ${email} logged in successfully from IP: ${ipAddress}`);
+      console.log(
+        `Admin ${email} logged in successfully from IP: ${ipAddress}`,
+      );
 
       res.json({
         _id: admin._id,
@@ -130,14 +161,48 @@ export const adminLogin = async (req, res) => {
     } else {
       // Log failed attempt
       await logLoginAttempt(req, false, "admin");
-      
-      console.log(`Failed admin login attempt for ${email} from IP: ${ipAddress}`);
-      
+
+      console.log(
+        `Failed admin login attempt for ${email} from IP: ${ipAddress}`,
+      );
+
       res.status(401).json({ message: "Admin credentials invalid" });
     }
   } catch (error) {
     console.error("Admin login error:", error);
-    res.status(500).json({ message: "Admin login failed", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Admin login failed", error: error.message });
+  }
+};
+
+// User Logout
+export const logout = async (req, res) => {
+  try {
+    // Log user activity
+    const user = await User.findById(req.user.id);
+    if (user) {
+      const ipAddress =
+        req.headers["x-forwarded-for"] || req.connection.remoteAddress;
+      const userAgent = req.headers["user-agent"];
+      await logUserActivity(
+        user._id,
+        user.email,
+        user.name,
+        "Logout",
+        null,
+        {},
+        ipAddress,
+        userAgent,
+      );
+    }
+
+    res.status(200).json({
+      message: "Logged out successfully",
+    });
+  } catch (error) {
+    console.error("Logout error:", error);
+    res.status(500).json({ message: "Logout failed" });
   }
 };
 
@@ -145,11 +210,11 @@ export const adminLogin = async (req, res) => {
 export const adminLogout = async (req, res) => {
   try {
     const token = req.headers.authorization.split(" ")[1];
-    
+
     // Invalidate the session
     await AdminSession.findOneAndUpdate(
       { token, adminId: req.user._id },
-      { isActive: false }
+      { isActive: false },
     );
 
     res.status(200).json({
@@ -166,7 +231,7 @@ export const verifyAdmin = async (req, res) => {
   try {
     if (req.user && req.user.isAdmin) {
       const token = req.headers.authorization.split(" ")[1];
-      
+
       // Check if session exists and is active
       const session = await AdminSession.findOne({
         token,
@@ -176,9 +241,9 @@ export const verifyAdmin = async (req, res) => {
       });
 
       if (!session) {
-        return res.status(401).json({ 
-          valid: false, 
-          message: "Session expired. Please login again." 
+        return res.status(401).json({
+          valid: false,
+          message: "Session expired. Please login again.",
         });
       }
 
@@ -205,7 +270,7 @@ export const verifyAdmin = async (req, res) => {
 export const refreshAdminToken = async (req, res) => {
   try {
     const oldToken = req.headers.authorization.split(" ")[1];
-    
+
     // Find the session
     const session = await AdminSession.findOne({
       token: oldToken,
@@ -242,7 +307,7 @@ export const refreshAdminToken = async (req, res) => {
 export const getAdminProfile = async (req, res) => {
   try {
     const admin = await User.findById(req.user._id).select("-password");
-    
+
     if (!admin || !admin.isAdmin) {
       return res.status(404).json({ message: "Admin profile not found" });
     }
@@ -255,7 +320,7 @@ export const getAdminProfile = async (req, res) => {
         email: admin.email,
         image: admin.image,
         isAdmin: admin.isAdmin,
-      }
+      },
     });
   } catch (error) {
     console.error("Get profile error:", error);
@@ -287,7 +352,7 @@ export const updateAdminProfile = async (req, res) => {
         name: admin.name,
         email: admin.email,
         image: admin.image,
-      }
+      },
     });
   } catch (error) {
     console.error("Update profile error:", error);
@@ -302,20 +367,20 @@ export const changeAdminPassword = async (req, res) => {
 
     // Validate inputs
     if (!oldPassword || !newPassword || !confirmPassword) {
-      return res.status(400).json({ 
-        message: "Old password, new password, and confirmation are required" 
+      return res.status(400).json({
+        message: "Old password, new password, and confirmation are required",
       });
     }
 
     if (newPassword !== confirmPassword) {
-      return res.status(400).json({ 
-        message: "New password and confirmation do not match" 
+      return res.status(400).json({
+        message: "New password and confirmation do not match",
       });
     }
 
     if (newPassword.length < 6) {
-      return res.status(400).json({ 
-        message: "New password must be at least 6 characters long" 
+      return res.status(400).json({
+        message: "New password must be at least 6 characters long",
       });
     }
 
@@ -328,8 +393,8 @@ export const changeAdminPassword = async (req, res) => {
     // Check if old password is correct
     const isPasswordCorrect = await admin.matchPassword(oldPassword);
     if (!isPasswordCorrect) {
-      return res.status(401).json({ 
-        message: "Old password is incorrect" 
+      return res.status(401).json({
+        message: "Old password is incorrect",
       });
     }
 
@@ -339,7 +404,7 @@ export const changeAdminPassword = async (req, res) => {
 
     res.json({
       success: true,
-      message: "Password changed successfully"
+      message: "Password changed successfully",
     });
   } catch (error) {
     console.error("Change password error:", error);
