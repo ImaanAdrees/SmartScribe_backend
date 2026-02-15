@@ -2,6 +2,7 @@ import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 import AdminSession from "../models/AdminSession.js";
 import { logLoginAttempt } from "../middleware/securityMiddleware.js";
+import { logUserActivity } from "../utils/activityLogger.js";
 import { io } from "../../index.js";
 
 // Generate different token expiry for admin vs regular users
@@ -73,6 +74,11 @@ export const login = async (req, res) => {
     
     if (user && (await user.matchPassword(password))) {
       await logLoginAttempt(req, true, "user");
+      
+      // Log user activity
+      const ipAddress = req.headers["x-forwarded-for"] || req.connection.remoteAddress;
+      const userAgent = req.headers["user-agent"];
+await logUserActivity(user._id, user.email, user.name, "Login", null, {}, ipAddress, userAgent);
       
       res.json({
         _id: user._id,
@@ -150,6 +156,14 @@ export const adminLogin = async (req, res) => {
 // User Logout
 export const logout = async (req, res) => {
   try {
+    // Log user activity
+    const user = await User.findById(req.user.id);
+    if (user) {
+      const ipAddress = req.headers["x-forwarded-for"] || req.connection.remoteAddress;
+      const userAgent = req.headers["user-agent"];
+      await logUserActivity(user._id, user.email, user.name, "Logout", null, {}, ipAddress, userAgent);
+    }
+    
     res.status(200).json({
       message: "Logged out successfully",
     });

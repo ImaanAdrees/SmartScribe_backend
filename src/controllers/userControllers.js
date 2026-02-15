@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { io } from "../../index.js";
+import { logUserActivity } from "../utils/activityLogger.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -53,6 +54,11 @@ export const updateUserProfile = async (req, res) => {
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
+
+    // Log user activity
+    const ipAddress = req.headers["x-forwarded-for"] || req.connection.remoteAddress;
+    const userAgent = req.headers["user-agent"];
+await logUserActivity(user._id, user.email, user.name, "Profile Updated", "Updated profile information", { name }, ipAddress, userAgent);
 
     // Emit socket event for real-time update
     if (io) {

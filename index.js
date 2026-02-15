@@ -12,6 +12,7 @@ import authRoutes from "./src/routes/authRoutes.js";
 import userRoutes from "./src/routes/userRoutes.js";
 import notificationRoutes from "./src/routes/notificationRoutes.js";
 import maintenanceRoutes from "./src/routes/maintenanceRoutes.js";
+import activityRoutes from "./src/routes/activityRoutes.js";
 import { initializeMaintenance } from "./src/controllers/maintenanceControllers.js";
 import { startBackupScheduler } from "./src/utils/backupScheduler.js";
 
@@ -89,6 +90,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/maintenance", maintenanceRoutes);
+app.use("/api/activity", activityRoutes);
 
 
 
