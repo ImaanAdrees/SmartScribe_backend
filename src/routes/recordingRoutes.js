@@ -50,7 +50,7 @@ router.post('/upload', protect, upload.single('audio'), async (req, res) => {
 // Fetch user's recordings
 router.get('/user', protect, async (req, res) => {
   try {
-    const recordings = await Recording.find({ user: req.user._id });
+    const recordings = await Recording.find({ user: req.user._id }).sort({ createdAt: -1 });
     res.json({ success: true, recordings });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });

@@ -7,6 +7,9 @@ import {
   getTopActiveUsers,
 } from "../utils/activityLogger.js";
 
+// Import io to emit real-time updates
+import { io } from "../../index.js";
+
 /**
  * Log user activity - called from app when user performs action
  * POST /api/activity/log
@@ -61,6 +64,20 @@ export const logActivity = async (req, res) => {
       ipAddress,
       userAgent,
     );
+
+    // Emit real-time analytics update to connected clients
+    try {
+      if (io && activity) {
+        io.emit("analytics_update", {
+          action: activity.action,
+          userId: activity.userId,
+          userEmail: activity.userEmail,
+          timestamp: activity.timestamp,
+        });
+      }
+    } catch (emitErr) {
+      console.error("Failed to emit analytics update:", emitErr.message);
+    }
 
     res.status(201).json({
       message: "Activity logged successfully",
@@ -156,6 +173,76 @@ export const getActivityStatistics = async (req, res) => {
 };
 
 /**
+ * Get usage data bucketed by day/week/month
+ * GET /api/activity/usage?filter=daily|weekly|monthly&daysBack=30
+ */
+export const getUsageData = async (req, res) => {
+  try {
+    const { filter = "daily", daysBack = 30 } = req.query;
+    const days = parseInt(daysBack, 10);
+
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+
+    // Choose unit for $dateTrunc
+    let unit = "day";
+    if (filter === "weekly") unit = "week";
+    if (filter === "monthly") unit = "month";
+
+    // Build aggregation pipeline to return per-period totals and action breakdowns
+    const pipeline = [
+      { $match: { timestamp: { $gte: startDate } } },
+      {
+        $addFields: {
+          period: {
+            $dateTrunc: { date: "$timestamp", unit: unit, timezone: "UTC" },
+          },
+        },
+      },
+      // Count per period+action
+      {
+        $group: {
+          _id: { period: "$period", action: "$action" },
+          count: { $sum: 1 },
+        },
+      },
+      // Aggregate actions into per-period document
+      {
+        $group: {
+          _id: "$_id.period",
+          actions: { $push: { action: "$_id.action", count: "$count" } },
+          transcriptions: {
+            $sum: {
+              $cond: [{ $eq: ["$_id.action", "Transcription Created"] }, "$count", 0],
+            },
+          },
+          summaries: {
+            $sum: { $cond: [{ $eq: ["$_id.action", "Summary Generated"] }, "$count", 0] },
+          },
+          total: { $sum: "$count" },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ];
+
+    const results = await UserActivity.aggregate(pipeline);
+
+    const data = results.map((r) => ({
+      period: r._id,
+      transcriptions: r.transcriptions || 0,
+      summaries: r.summaries || 0,
+      activities: r.total || 0,
+      actions: r.actions || [],
+    }));
+
+    res.json({ data });
+  } catch (error) {
+    console.error("Error fetching usage data:", error.message);
+    res.status(500).json({ message: "Failed to fetch usage data", error: error.message });
+  }
+};
+
+/**
  * Get top active users - admin only
  * GET /api/activity/top-users?limit=5&daysBack=30
  */
@@ -186,6 +273,67 @@ export const getTopUsers = async (req, res) => {
     res
       .status(500)
       .json({ message: "Failed to fetch top users", error: error.message });
+  }
+};
+
+/**
+ * Get top users with breakdown per action
+ * GET /api/activity/top-users-breakdown?limit=5&daysBack=1
+ */
+export const getTopUsersBreakdown = async (req, res) => {
+  try {
+    const { limit = 5, daysBack = 1 } = req.query;
+    const days = parseInt(daysBack, 10);
+
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+
+    // Aggregate counts per user per action, then pivot actions into object
+    const pipeline = [
+      { $match: { timestamp: { $gte: startDate } } },
+      {
+        $group: {
+          _id: { userEmail: "$userEmail", action: "$action" },
+          count: { $sum: 1 },
+          userName: { $first: "$userName" },
+          userId: { $first: "$userId" },
+        },
+      },
+      {
+        $group: {
+          _id: "$_id.userEmail",
+          userName: { $first: "$userName" },
+          userId: { $first: "$userId" },
+          actions: {
+            $push: { action: "$_id.action", count: "$count" },
+          },
+          total: { $sum: "$count" },
+        },
+      },
+      { $sort: { total: -1 } },
+      { $limit: parseInt(limit) },
+    ];
+
+    const results = await UserActivity.aggregate(pipeline);
+
+    const mapped = results.map((r) => {
+      const counts = {};
+      (r.actions || []).forEach((a) => {
+        counts[a.action] = a.count;
+      });
+      return {
+        userEmail: r._id,
+        userName: r.userName || r._id,
+        userId: r.userId,
+        counts,
+        total: r.total || 0,
+      };
+    });
+
+    res.json({ topUsers: mapped, timeRange: { days } });
+  } catch (error) {
+    console.error("Error fetching top users breakdown:", error.message);
+    res.status(500).json({ message: "Failed to fetch top users breakdown", error: error.message });
   }
 };
 
