@@ -2,7 +2,9 @@ import express from 'express';
 import multer from 'multer';
 import path from 'path';
 import Recording from '../models/Recording.js';
+import Transcription from '../models/Transcription.js';
 import { protect } from '../middleware/authMiddleware.js';
+import { transcribeAudio } from '../utils/openaiUtils.js';
 import fs from 'fs';
 
 const router = express.Router();
@@ -20,7 +22,9 @@ const storage = multer.diskStorage({
   },
   filename: function (req, file, cb) {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, 'recording-' + uniqueSuffix + path.extname(file.originalname));
+    let ext = path.extname(file.originalname);
+    if (!ext) ext = '.m4a';
+    cb(null, 'recording-' + uniqueSuffix + ext);
   }
 });
 
@@ -87,6 +91,61 @@ router.delete('/:id', protect, async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     console.error('Delete recording error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Fetch a specific recording with its transcription
+router.get('/:id', protect, async (req, res) => {
+  try {
+    const recording = await Recording.findById(req.params.id);
+    if (!recording) return res.status(404).json({ success: false, error: 'Recording not found' });
+    
+    if (String(recording.user) !== String(req.user._id)) {
+      return res.status(403).json({ success: false, error: 'Not authorized' });
+    }
+
+    const transcription = await Transcription.findOne({ recording: recording._id });
+    
+    res.json({ success: true, recording, transcription });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Trigger transcription for a recording
+router.post('/:id/transcribe', protect, async (req, res) => {
+  try {
+    const recording = await Recording.findById(req.params.id);
+    if (!recording) return res.status(404).json({ success: false, error: 'Recording not found' });
+
+    if (String(recording.user) !== String(req.user._id)) {
+      return res.status(403).json({ success: false, error: 'Not authorized' });
+    }
+
+    // Check if transcription already exists
+    let transcription = await Transcription.findOne({ recording: recording._id });
+    if (transcription) {
+      return res.json({ success: true, transcription, message: 'Transcription already exists' });
+    }
+
+    const filePath = path.join(path.resolve(), 'uploads', 'recording', recording.filename);
+    
+    console.log('[DEBUG] Starting transcription for:', recording.filename);
+    const text = await transcribeAudio(filePath);
+    console.log('[DEBUG] Transcription completed for:', recording.filename);
+
+    transcription = new Transcription({
+      user: req.user._id,
+      recording: recording._id,
+      text,
+    });
+
+    await transcription.save();
+
+    res.json({ success: true, transcription });
+  } catch (err) {
+    console.error('Transcription error:', err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
