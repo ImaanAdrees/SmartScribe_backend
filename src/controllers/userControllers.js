@@ -153,10 +153,11 @@ export const changePassword = async (req, res) => {
     }
 
     // Update password
-    user.password = newPassword;
-    await user.save();
+      user.password = newPassword;
+      user.markModified('password');
+      await user.save();
 
-    res.json({ message: "Password changed successfully" });
+    res.json({ success: true, message: "Password changed successfully" });
   } catch (error) {
     res
       .status(500)
