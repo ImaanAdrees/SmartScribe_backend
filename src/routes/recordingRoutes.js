@@ -3,8 +3,10 @@ import multer from 'multer';
 import path from 'path';
 import Recording from '../models/Recording.js';
 import Transcription from '../models/Transcription.js';
+import User from '../models/User.js';
 import { protect } from '../middleware/authMiddleware.js';
-import { transcribeAudio } from '../utils/openaiUtils.js';
+import { transcribeAudio, labelSpeakers } from '../utils/openaiUtils.js';
+import { logUserActivity } from '../utils/activityLogger.js';
 import fs from 'fs';
 
 const router = express.Router();
@@ -43,6 +45,17 @@ router.post('/upload', protect, upload.single('audio'), async (req, res) => {
       duration,
     });
     await recording.save();
+    
+    // Log activity
+    await logUserActivity(
+      req.user._id,
+      req.user.email,
+      req.user.name,
+      'File Upload',
+      `Audio recording "${recording.name}" uploaded.`,
+      { recordingId: recording._id }
+    );
+
     console.log('Recording uploaded:', recording.filename, 'by user', req.user._id);
     res.status(201).json({ success: true, recording });
   } catch (err) {
@@ -82,6 +95,7 @@ router.delete('/:id', protect, async (req, res) => {
     }
 
     try {
+      await Transcription.deleteMany({ recording: req.params.id });
       await Recording.findByIdAndDelete(req.params.id);
     } catch (dbErr) {
       console.error('DB delete failed for recording', req.params.id, dbErr);
@@ -132,16 +146,31 @@ router.post('/:id/transcribe', protect, async (req, res) => {
     const filePath = path.join(path.resolve(), 'uploads', 'recording', recording.filename);
     
     console.log('[DEBUG] Starting transcription for:', recording.filename);
-    const text = await transcribeAudio(filePath);
-    console.log('[DEBUG] Transcription completed for:', recording.filename);
+    const rawText = await transcribeAudio(filePath);
+    console.log('[DEBUG] Transcription completed, now labeling speakers...');
+    const labeledText = await labelSpeakers(rawText);
+    console.log('[DEBUG] Speaker labeling completed.');
 
     transcription = new Transcription({
       user: req.user._id,
       recording: recording._id,
-      text,
+      text: labeledText,
     });
 
     await transcription.save();
+
+    // Increment user transcription count (persistent historical count)
+    await User.findByIdAndUpdate(req.user._id, { $inc: { transcriptions: 1 } });
+
+    // Log activity
+    await logUserActivity(
+      req.user._id,
+      req.user.email,
+      req.user.name,
+      'Transcription Created',
+      `Transcription created for recording "${recording.name}".`,
+      { recordingId: recording._id, transcriptionId: transcription._id }
+    );
 
     res.json({ success: true, transcription });
   } catch (err) {
