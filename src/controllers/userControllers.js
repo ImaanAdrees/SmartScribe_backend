@@ -1,4 +1,8 @@
 import User from "../models/User.js";
+import Recording from "../models/Recording.js";
+import Transcription from "../models/Transcription.js";
+import UserNotification from "../models/UserNotification.js";
+import Notification from "../models/Notification.js";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -169,7 +173,7 @@ export const changePassword = async (req, res) => {
 export const listUsers = async (req, res) => {
   try {
     const users = await User.find({ isAdmin: false })
-      .select("name email role createdAt transcriptions password")
+      .select("name email role phone organization city country createdAt transcriptions password")
       .sort({ createdAt: -1 });
 
     const payload = users.map((user) => ({
@@ -177,6 +181,10 @@ export const listUsers = async (req, res) => {
       name: user.name || "Unknown",
       email: user.email,
       role: formatRole(user.role),
+      phone: user.phone || "-",
+      organization: user.organization || "-",
+      city: user.city || "-",
+      country: user.country || "-",
       joinDate: user.createdAt
         ? user.createdAt.toISOString().split("T")[0]
         : null,
@@ -210,14 +218,62 @@ export const deleteUser = async (req, res) => {
       return res.status(403).json({ message: "Cannot delete admin users" });
     }
 
+    // Delete user profile image from disk if present
+    if (user.image) {
+      const profileImagePath = path.join(path.resolve(), user.image.replace(/^\//, ""));
+      if (fs.existsSync(profileImagePath)) {
+        try {
+          fs.unlinkSync(profileImagePath);
+        } catch (fileError) {
+          console.warn("[DeleteUser] Failed to remove profile image:", fileError.message);
+        }
+      }
+    }
+
+    // Delete recording files from disk
+    const recordings = await Recording.find({ user: id }).select("filename");
+    for (const recording of recordings) {
+      const recordingPath = path.join(path.resolve(), "uploads", "recording", recording.filename);
+      if (fs.existsSync(recordingPath)) {
+        try {
+          fs.unlinkSync(recordingPath);
+        } catch (fileError) {
+          console.warn("[DeleteUser] Failed to remove recording file:", fileError.message);
+        }
+      }
+    }
+
+    // Delete user-owned data records
+    await Transcription.deleteMany({ user: id });
+    await Transcription.deleteMany({ recording: { $in: recordings.map((r) => r._id) } });
+    await Recording.deleteMany({ user: id });
+    await UserNotification.deleteMany({ userId: id });
+
+    // Remove user references from notifications
+    await Notification.updateMany(
+      { targetUserIds: id },
+      { $pull: { targetUserIds: user._id } },
+    );
+
     await User.deleteOne({ _id: id });
 
     // Emit socket event for real-time update
     if (io) {
       io.emit("user_list_updated");
+      io.emit("analytics_update", {
+        action: "Account Deleted",
+        userId: String(user._id),
+        userEmail: user.email,
+        timestamp: new Date(),
+      });
     }
 
-    res.json({ message: "User deleted" });
+    res.json({
+      message: "User and associated records deleted",
+      deleted: {
+        recordings: recordings.length,
+      },
+    });
   } catch (error) {
     res
       .status(500)

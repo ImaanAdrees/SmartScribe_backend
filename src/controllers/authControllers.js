@@ -1,9 +1,79 @@
 import jwt from "jsonwebtoken";
+import nodemailer from "nodemailer";
 import User from "../models/User.js";
 import AdminSession from "../models/AdminSession.js";
 import { logLoginAttempt } from "../middleware/securityMiddleware.js";
 import { logUserActivity } from "../utils/activityLogger.js";
 import { io } from "../../index.js";
+
+const signupOtpStore = new Map();
+const signupVerifiedStore = new Map();
+
+const OTP_EXPIRY_MS = 10 * 60 * 1000;
+const VERIFIED_EXPIRY_MS = 10 * 60 * 1000;
+
+const createOtpCode = () => String(Math.floor(100000 + Math.random() * 900000));
+
+const createMailTransporter = () => {
+  if (!process.env.USER_EMAIL || !process.env.USER_PASSWORD) {
+    return null;
+  }
+
+  return nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+      user: process.env.USER_EMAIL,
+      pass: process.env.USER_PASSWORD,
+    },
+  });
+};
+
+const sendSignupOtpEmail = async (email, otp) => {
+  const transporter = createMailTransporter();
+
+  if (!transporter) {
+    throw new Error("Email service is not configured");
+  }
+
+  await transporter.sendMail({
+    from: process.env.USER_EMAIL,
+    to: email,
+    subject: "SmartScribe Signup OTP",
+    text: `Your SmartScribe OTP is ${otp}. It will expire in 10 minutes.`,
+  });
+};
+
+const RESET_PASSWORD_EXPIRY = "15m";
+
+const getResetPasswordBaseUrl = () => {
+  return (
+    process.env.APP_RESET_PASSWORD_URL ||
+    process.env.REACT_APP_FRONTEND_URL ||
+    process.env.FRONT_URL ||
+    "http://localhost:8081"
+  );
+};
+
+const createPasswordResetToken = (userId) => {
+  return jwt.sign({ id: userId, purpose: "password-reset" }, process.env.JWT_SECRET, {
+    expiresIn: RESET_PASSWORD_EXPIRY,
+  });
+};
+
+const sendPasswordResetEmail = async (email, resetLink) => {
+  const transporter = createMailTransporter();
+
+  if (!transporter) {
+    throw new Error("Email service is not configured");
+  }
+
+  await transporter.sendMail({
+    from: process.env.USER_EMAIL,
+    to: email,
+    subject: "SmartScribe Password Reset",
+    text: `Reset your SmartScribe password using this link: ${resetLink}`,
+  });
+};
 
 // Generate different token expiry for admin vs regular users
 const generateToken = (id, isAdmin = false) => {
@@ -33,25 +103,45 @@ const formatRole = (role) => {
 
 // User Signup
 export const signup = async (req, res) => {
-  const { name, email, password, role } = req.body;
+  const { name, email, password, role, phone, organization, city, country } =
+    req.body;
 
   try {
+    const normalizedEmail = email?.trim()?.toLowerCase();
+    if (!normalizedEmail) {
+      return res.status(400).json({ message: "Email is required" });
+    }
+
+    const verifiedState = signupVerifiedStore.get(normalizedEmail);
+    if (!verifiedState || verifiedState.expiresAt < Date.now()) {
+      signupVerifiedStore.delete(normalizedEmail);
+      return res.status(400).json({
+        message: "Please verify OTP before signup",
+      });
+    }
+
     const { value: normalizedRole, error: roleError } = normalizeRole(role);
     if (roleError) {
       return res.status(400).json({ message: roleError });
     }
 
-    const userExists = await User.findOne({ email });
+    const userExists = await User.findOne({ email: normalizedEmail });
     if (userExists) {
       return res.status(400).json({ message: "User already exists" });
     }
 
     const user = await User.create({
       name,
-      email,
+      email: normalizedEmail,
       password,
       role: normalizedRole,
+      phone: phone?.trim() || null,
+      organization: organization?.trim() || null,
+      city: city?.trim() || null,
+      country: country?.trim() || null,
     });
+
+    signupVerifiedStore.delete(normalizedEmail);
 
     // Emit socket event for real-time update
     if (io) {
@@ -63,12 +153,208 @@ export const signup = async (req, res) => {
       name: user.name,
       email: user.email,
       role: formatRole(user.role),
+      phone: user.phone,
+      organization: user.organization,
+      city: user.city,
+      country: user.country,
       token: generateToken(user._id, false),
     });
   } catch (error) {
     res
       .status(500)
       .json({ message: "Error creating user", error: error.message });
+  }
+};
+
+export const sendSignupOtp = async (req, res) => {
+  const { email } = req.body;
+
+  try {
+    const normalizedEmail = email?.trim()?.toLowerCase();
+
+    if (!normalizedEmail) {
+      return res.status(400).json({ message: "Email is required" });
+    }
+
+    const existingUser = await User.findOne({ email: normalizedEmail });
+    if (existingUser) {
+      return res.status(400).json({ message: "User already exists" });
+    }
+
+    const otp = createOtpCode();
+    signupOtpStore.set(normalizedEmail, {
+      otp,
+      expiresAt: Date.now() + OTP_EXPIRY_MS,
+    });
+
+    await sendSignupOtpEmail(normalizedEmail, otp);
+
+    return res.status(200).json({
+      message: "OTP sent successfully",
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Failed to send OTP",
+      error: error.message,
+    });
+  }
+};
+
+export const resendSignupOtp = async (req, res) => {
+  const { email } = req.body;
+
+  try {
+    const normalizedEmail = email?.trim()?.toLowerCase();
+
+    if (!normalizedEmail) {
+      return res.status(400).json({ message: "Email is required" });
+    }
+
+    const existingUser = await User.findOne({ email: normalizedEmail });
+    if (existingUser) {
+      return res.status(400).json({ message: "User already exists" });
+    }
+
+    const otp = createOtpCode();
+    signupOtpStore.set(normalizedEmail, {
+      otp,
+      expiresAt: Date.now() + OTP_EXPIRY_MS,
+    });
+
+    await sendSignupOtpEmail(normalizedEmail, otp);
+
+    return res.status(200).json({
+      message: "OTP resent successfully",
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Failed to resend OTP",
+      error: error.message,
+    });
+  }
+};
+
+export const verifySignupOtp = async (req, res) => {
+  const { email, otp } = req.body;
+
+  try {
+    const normalizedEmail = email?.trim()?.toLowerCase();
+    const normalizedOtp = String(otp || "").trim();
+
+    if (!normalizedEmail || !normalizedOtp) {
+      return res.status(400).json({ message: "Email and OTP are required" });
+    }
+
+    const otpState = signupOtpStore.get(normalizedEmail);
+
+    if (!otpState || otpState.expiresAt < Date.now()) {
+      signupOtpStore.delete(normalizedEmail);
+      return res.status(400).json({ message: "OTP expired. Please resend OTP" });
+    }
+
+    if (otpState.otp !== normalizedOtp) {
+      return res.status(400).json({ message: "Invalid OTP" });
+    }
+
+    signupOtpStore.delete(normalizedEmail);
+    signupVerifiedStore.set(normalizedEmail, {
+      expiresAt: Date.now() + VERIFIED_EXPIRY_MS,
+    });
+
+    return res.status(200).json({ message: "OTP verified successfully" });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Failed to verify OTP",
+      error: error.message,
+    });
+  }
+};
+
+export const requestPasswordReset = async (req, res) => {
+  const { email, channel } = req.body;
+
+  try {
+    const normalizedEmail = email?.trim()?.toLowerCase();
+    if (!normalizedEmail) {
+      return res.status(400).json({ message: "Email is required" });
+    }
+
+    const user = await User.findOne({ email: normalizedEmail });
+    if (!user) {
+      return res.status(404).json({ message: "Email does not exist" });
+    }
+
+    const resetToken = createPasswordResetToken(user._id);
+
+    if (channel === "app") {
+      return res.status(200).json({
+        message: "Email verified",
+        token: resetToken,
+      });
+    }
+
+    const resetBaseUrl = getResetPasswordBaseUrl();
+    const resetLink = `${resetBaseUrl}/auth/updatepass?token=${encodeURIComponent(resetToken)}`;
+
+    await sendPasswordResetEmail(normalizedEmail, resetLink);
+
+    return res.status(200).json({
+      message: "Password reset link sent to email",
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Failed to send password reset email",
+      error: error.message,
+    });
+  }
+};
+
+export const resetPasswordWithToken = async (req, res) => {
+  const { token, password, confirmPassword } = req.body;
+
+  try {
+    if (!token || !password || !confirmPassword) {
+      return res.status(400).json({ message: "Token, password and confirm password are required" });
+    }
+
+    if (password !== confirmPassword) {
+      return res.status(400).json({ message: "Passwords do not match" });
+    }
+
+    if (password.length < 8) {
+      return res.status(400).json({ message: "Password must be at least 8 characters long" });
+    }
+
+    let payload;
+    try {
+      payload = jwt.verify(token, process.env.JWT_SECRET);
+    } catch (tokenError) {
+      return res.status(400).json({ message: "Invalid or expired reset token" });
+    }
+
+    if (!payload?.id || payload?.purpose !== "password-reset") {
+      return res.status(400).json({ message: "Invalid reset token" });
+    }
+
+    const user = await User.findById(payload.id);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const isSamePassword = await user.matchPassword(password);
+    if (isSamePassword) {
+      return res.status(400).json({ message: "Your password is already this" });
+    }
+
+    user.password = password;
+    await user.save();
+
+    return res.status(200).json({ message: "Password updated successfully" });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Failed to reset password",
+      error: error.message,
+    });
   }
 };
 

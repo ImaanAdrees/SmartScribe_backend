@@ -24,22 +24,31 @@ export const transcribeAudio = async (filePath) => {
    
   try {
     const filename = path.basename(filePath);
+    const fileStat = fs.statSync(filePath);
+    if (!fileStat?.size || fileStat.size < 1024) {
+      throw new Error('Uploaded audio file is empty or too small to decode');
+    }
+
     let hintName = filename.includes('.') ? filename : `${filename}.m4a`;
     let processFilePath = filePath;
-    const convertedPath = `${filePath}.mp3`;
+    const convertedPath = `${filePath}.wav`;
 
-    // Try to convert using ffmpeg to ensure compatibility, especially for mobile uploads
+    // Try to convert using ffmpeg to ensure compatibility, especially for iOS/mobile uploads
     try {
       await new Promise((resolve, reject) => {
         ffmpeg(filePath)
-          .toFormat('mp3')
+          .noVideo()
+          .audioChannels(1)
+          .audioFrequency(16000)
+          .audioCodec('pcm_s16le')
+          .toFormat('wav')
           .on('error', (err) => {
             console.warn('FFmpeg conversion failed or ffmpeg not installed. Falling back to original file:', err.message);
             resolve(); // Resolve anyway to fallback to original file
           })
           .on('end', () => {
             processFilePath = convertedPath;
-            hintName = `${filename}.mp3`;
+            hintName = `${filename}.wav`;
             resolve();
           })
           .save(convertedPath);
@@ -48,11 +57,37 @@ export const transcribeAudio = async (filePath) => {
       console.warn('Audio conversion step skipped:', conversionErr.message);
     }
 
-    const transcription = await openai.audio.transcriptions.create({
-      file: await OpenAI.toFile(fs.createReadStream(processFilePath), hintName),
-      model: 'whisper-1',
-      language: 'en',
-    });
+    const hintCandidates = [
+      hintName,
+      `${filename}.m4a`,
+      `${filename}.mp4`,
+      `${filename}.wav`,
+      `${filename}.mp3`,
+      `${filename}.aac`,
+      `${filename}.webm`,
+    ];
+
+    let transcription = null;
+    let lastError = null;
+
+    for (const candidateHint of hintCandidates) {
+      try {
+        transcription = await openai.audio.transcriptions.create({
+          file: await OpenAI.toFile(fs.createReadStream(processFilePath), candidateHint),
+          model: 'whisper-1',
+          language: 'en',
+        });
+        if (transcription?.text) {
+          break;
+        }
+      } catch (candidateError) {
+        lastError = candidateError;
+      }
+    }
+
+    if (!transcription?.text) {
+      throw lastError || new Error('Audio decode failed for all supported hints');
+    }
 
     // Cleanup converted file if one was created
     if (processFilePath !== filePath && fs.existsSync(processFilePath)) {

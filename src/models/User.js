@@ -20,6 +20,26 @@ const userSchema = new mongoose.Schema(
       unique: true,
       lowercase: true,
     },
+    phone: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+    organization: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+    city: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+    country: {
+      type: String,
+      trim: true,
+      default: null,
+    },
     password: {
       type: String,
       required: true,
