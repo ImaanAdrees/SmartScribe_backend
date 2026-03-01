@@ -33,7 +33,8 @@ const formatRole = (role) => {
 
 // User Signup
 export const signup = async (req, res) => {
-  const { name, email, password, role } = req.body;
+  const { name, email, password, role, phone, organization, city, country } =
+    req.body;
 
   try {
     const { value: normalizedRole, error: roleError } = normalizeRole(role);
@@ -51,6 +52,10 @@ export const signup = async (req, res) => {
       email,
       password,
       role: normalizedRole,
+      phone: phone?.trim() || null,
+      organization: organization?.trim() || null,
+      city: city?.trim() || null,
+      country: country?.trim() || null,
     });
 
     // Emit socket event for real-time update
@@ -63,6 +68,10 @@ export const signup = async (req, res) => {
       name: user.name,
       email: user.email,
       role: formatRole(user.role),
+      phone: user.phone,
+      organization: user.organization,
+      city: user.city,
+      country: user.country,
       token: generateToken(user._id, false),
     });
   } catch (error) {
