@@ -169,7 +169,7 @@ export const changePassword = async (req, res) => {
 export const listUsers = async (req, res) => {
   try {
     const users = await User.find({ isAdmin: false })
-      .select("name email role createdAt transcriptions password")
+      .select("name email role phone organization city country createdAt transcriptions password")
       .sort({ createdAt: -1 });
 
     const payload = users.map((user) => ({
@@ -177,6 +177,10 @@ export const listUsers = async (req, res) => {
       name: user.name || "Unknown",
       email: user.email,
       role: formatRole(user.role),
+      phone: user.phone || "-",
+      organization: user.organization || "-",
+      city: user.city || "-",
+      country: user.country || "-",
       joinDate: user.createdAt
         ? user.createdAt.toISOString().split("T")[0]
         : null,
