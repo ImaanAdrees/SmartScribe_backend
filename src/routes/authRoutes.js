@@ -1,6 +1,9 @@
 import express from "express";
 import { 
   signup, 
+  sendSignupOtp,
+  resendSignupOtp,
+  verifySignupOtp,
   login, 
   logout,
   adminLogin, 
@@ -23,6 +26,9 @@ import {
 const router = express.Router();
 
 // Public routes with rate limiting
+router.post("/signup/send-otp", apiLimiter, sendSignupOtp);
+router.post("/signup/resend-otp", apiLimiter, resendSignupOtp);
+router.post("/signup/verify-otp", apiLimiter, verifySignupOtp);
 router.post("/signup", apiLimiter, validatePasswordStrength, signup);
 router.post("/login", apiLimiter, login);
 router.post("/logout", protect, logout);

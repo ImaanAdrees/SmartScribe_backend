@@ -1,9 +1,47 @@
 import jwt from "jsonwebtoken";
+import nodemailer from "nodemailer";
 import User from "../models/User.js";
 import AdminSession from "../models/AdminSession.js";
 import { logLoginAttempt } from "../middleware/securityMiddleware.js";
 import { logUserActivity } from "../utils/activityLogger.js";
 import { io } from "../../index.js";
+
+const signupOtpStore = new Map();
+const signupVerifiedStore = new Map();
+
+const OTP_EXPIRY_MS = 10 * 60 * 1000;
+const VERIFIED_EXPIRY_MS = 10 * 60 * 1000;
+
+const createOtpCode = () => String(Math.floor(100000 + Math.random() * 900000));
+
+const createMailTransporter = () => {
+  if (!process.env.USER_EMAIL || !process.env.USER_PASSWORD) {
+    return null;
+  }
+
+  return nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+      user: process.env.USER_EMAIL,
+      pass: process.env.USER_PASSWORD,
+    },
+  });
+};
+
+const sendSignupOtpEmail = async (email, otp) => {
+  const transporter = createMailTransporter();
+
+  if (!transporter) {
+    throw new Error("Email service is not configured");
+  }
+
+  await transporter.sendMail({
+    from: process.env.USER_EMAIL,
+    to: email,
+    subject: "SmartScribe Signup OTP",
+    text: `Your SmartScribe OTP is ${otp}. It will expire in 10 minutes.`,
+  });
+};
 
 // Generate different token expiry for admin vs regular users
 const generateToken = (id, isAdmin = false) => {
@@ -37,19 +75,32 @@ export const signup = async (req, res) => {
     req.body;
 
   try {
+    const normalizedEmail = email?.trim()?.toLowerCase();
+    if (!normalizedEmail) {
+      return res.status(400).json({ message: "Email is required" });
+    }
+
+    const verifiedState = signupVerifiedStore.get(normalizedEmail);
+    if (!verifiedState || verifiedState.expiresAt < Date.now()) {
+      signupVerifiedStore.delete(normalizedEmail);
+      return res.status(400).json({
+        message: "Please verify OTP before signup",
+      });
+    }
+
     const { value: normalizedRole, error: roleError } = normalizeRole(role);
     if (roleError) {
       return res.status(400).json({ message: roleError });
     }
 
-    const userExists = await User.findOne({ email });
+    const userExists = await User.findOne({ email: normalizedEmail });
     if (userExists) {
       return res.status(400).json({ message: "User already exists" });
     }
 
     const user = await User.create({
       name,
-      email,
+      email: normalizedEmail,
       password,
       role: normalizedRole,
       phone: phone?.trim() || null,
@@ -57,6 +108,8 @@ export const signup = async (req, res) => {
       city: city?.trim() || null,
       country: country?.trim() || null,
     });
+
+    signupVerifiedStore.delete(normalizedEmail);
 
     // Emit socket event for real-time update
     if (io) {
@@ -78,6 +131,110 @@ export const signup = async (req, res) => {
     res
       .status(500)
       .json({ message: "Error creating user", error: error.message });
+  }
+};
+
+export const sendSignupOtp = async (req, res) => {
+  const { email } = req.body;
+
+  try {
+    const normalizedEmail = email?.trim()?.toLowerCase();
+
+    if (!normalizedEmail) {
+      return res.status(400).json({ message: "Email is required" });
+    }
+
+    const existingUser = await User.findOne({ email: normalizedEmail });
+    if (existingUser) {
+      return res.status(400).json({ message: "User already exists" });
+    }
+
+    const otp = createOtpCode();
+    signupOtpStore.set(normalizedEmail, {
+      otp,
+      expiresAt: Date.now() + OTP_EXPIRY_MS,
+    });
+
+    await sendSignupOtpEmail(normalizedEmail, otp);
+
+    return res.status(200).json({
+      message: "OTP sent successfully",
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Failed to send OTP",
+      error: error.message,
+    });
+  }
+};
+
+export const resendSignupOtp = async (req, res) => {
+  const { email } = req.body;
+
+  try {
+    const normalizedEmail = email?.trim()?.toLowerCase();
+
+    if (!normalizedEmail) {
+      return res.status(400).json({ message: "Email is required" });
+    }
+
+    const existingUser = await User.findOne({ email: normalizedEmail });
+    if (existingUser) {
+      return res.status(400).json({ message: "User already exists" });
+    }
+
+    const otp = createOtpCode();
+    signupOtpStore.set(normalizedEmail, {
+      otp,
+      expiresAt: Date.now() + OTP_EXPIRY_MS,
+    });
+
+    await sendSignupOtpEmail(normalizedEmail, otp);
+
+    return res.status(200).json({
+      message: "OTP resent successfully",
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Failed to resend OTP",
+      error: error.message,
+    });
+  }
+};
+
+export const verifySignupOtp = async (req, res) => {
+  const { email, otp } = req.body;
+
+  try {
+    const normalizedEmail = email?.trim()?.toLowerCase();
+    const normalizedOtp = String(otp || "").trim();
+
+    if (!normalizedEmail || !normalizedOtp) {
+      return res.status(400).json({ message: "Email and OTP are required" });
+    }
+
+    const otpState = signupOtpStore.get(normalizedEmail);
+
+    if (!otpState || otpState.expiresAt < Date.now()) {
+      signupOtpStore.delete(normalizedEmail);
+      return res.status(400).json({ message: "OTP expired. Please resend OTP" });
+    }
+
+    if (otpState.otp !== normalizedOtp) {
+      return res.status(400).json({ message: "Invalid OTP" });
+    }
+
+    signupOtpStore.delete(normalizedEmail);
+    signupVerifiedStore.set(normalizedEmail, {
+      expiresAt: Date.now() + VERIFIED_EXPIRY_MS,
+    });
+
+    return res.status(200).json({ message: "OTP verified successfully" });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Failed to verify OTP",
+      error: error.message,
+    });
   }
 };
 
