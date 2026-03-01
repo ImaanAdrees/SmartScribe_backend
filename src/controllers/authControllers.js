@@ -43,6 +43,38 @@ const sendSignupOtpEmail = async (email, otp) => {
   });
 };
 
+const RESET_PASSWORD_EXPIRY = "15m";
+
+const getResetPasswordBaseUrl = () => {
+  return (
+    process.env.APP_RESET_PASSWORD_URL ||
+    process.env.REACT_APP_FRONTEND_URL ||
+    process.env.FRONT_URL ||
+    "http://localhost:8081"
+  );
+};
+
+const createPasswordResetToken = (userId) => {
+  return jwt.sign({ id: userId, purpose: "password-reset" }, process.env.JWT_SECRET, {
+    expiresIn: RESET_PASSWORD_EXPIRY,
+  });
+};
+
+const sendPasswordResetEmail = async (email, resetLink) => {
+  const transporter = createMailTransporter();
+
+  if (!transporter) {
+    throw new Error("Email service is not configured");
+  }
+
+  await transporter.sendMail({
+    from: process.env.USER_EMAIL,
+    to: email,
+    subject: "SmartScribe Password Reset",
+    text: `Reset your SmartScribe password using this link: ${resetLink}`,
+  });
+};
+
 // Generate different token expiry for admin vs regular users
 const generateToken = (id, isAdmin = false) => {
   const expiresIn = isAdmin ? "2h" : "7d"; // Admin tokens expire in 2 hours
@@ -233,6 +265,94 @@ export const verifySignupOtp = async (req, res) => {
   } catch (error) {
     return res.status(500).json({
       message: "Failed to verify OTP",
+      error: error.message,
+    });
+  }
+};
+
+export const requestPasswordReset = async (req, res) => {
+  const { email, channel } = req.body;
+
+  try {
+    const normalizedEmail = email?.trim()?.toLowerCase();
+    if (!normalizedEmail) {
+      return res.status(400).json({ message: "Email is required" });
+    }
+
+    const user = await User.findOne({ email: normalizedEmail });
+    if (!user) {
+      return res.status(404).json({ message: "Email does not exist" });
+    }
+
+    const resetToken = createPasswordResetToken(user._id);
+
+    if (channel === "app") {
+      return res.status(200).json({
+        message: "Email verified",
+        token: resetToken,
+      });
+    }
+
+    const resetBaseUrl = getResetPasswordBaseUrl();
+    const resetLink = `${resetBaseUrl}/auth/updatepass?token=${encodeURIComponent(resetToken)}`;
+
+    await sendPasswordResetEmail(normalizedEmail, resetLink);
+
+    return res.status(200).json({
+      message: "Password reset link sent to email",
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Failed to send password reset email",
+      error: error.message,
+    });
+  }
+};
+
+export const resetPasswordWithToken = async (req, res) => {
+  const { token, password, confirmPassword } = req.body;
+
+  try {
+    if (!token || !password || !confirmPassword) {
+      return res.status(400).json({ message: "Token, password and confirm password are required" });
+    }
+
+    if (password !== confirmPassword) {
+      return res.status(400).json({ message: "Passwords do not match" });
+    }
+
+    if (password.length < 8) {
+      return res.status(400).json({ message: "Password must be at least 8 characters long" });
+    }
+
+    let payload;
+    try {
+      payload = jwt.verify(token, process.env.JWT_SECRET);
+    } catch (tokenError) {
+      return res.status(400).json({ message: "Invalid or expired reset token" });
+    }
+
+    if (!payload?.id || payload?.purpose !== "password-reset") {
+      return res.status(400).json({ message: "Invalid reset token" });
+    }
+
+    const user = await User.findById(payload.id);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const isSamePassword = await user.matchPassword(password);
+    if (isSamePassword) {
+      return res.status(400).json({ message: "Your password is already this" });
+    }
+
+    user.password = password;
+    await user.save();
+
+    return res.status(200).json({ message: "Password updated successfully" });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Failed to reset password",
       error: error.message,
     });
   }
