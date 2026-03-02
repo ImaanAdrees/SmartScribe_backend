@@ -19,6 +19,13 @@ export const protect = async (req, res, next) => {
         return res.status(401).json({ message: "User not found" });
       }
 
+      if (req.user.isDisabled && !req.user.isAdmin) {
+        return res.status(403).json({
+          message: "Your account is disabled. Please contact admin.",
+          code: "ACCOUNT_DISABLED",
+        });
+      }
+
       next();
     } catch (error) {
       if (error.name === "TokenExpiredError") {

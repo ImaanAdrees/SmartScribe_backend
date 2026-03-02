@@ -5,6 +5,9 @@ import {
   resendSignupOtp,
   verifySignupOtp,
   requestPasswordReset,
+  sendForgotPasswordOtp,
+  resendForgotPasswordOtp,
+  verifyForgotPasswordOtp,
   resetPasswordWithToken,
   login, 
   logout,
@@ -31,6 +34,9 @@ const router = express.Router();
 router.post("/signup/send-otp", apiLimiter, sendSignupOtp);
 router.post("/signup/resend-otp", apiLimiter, resendSignupOtp);
 router.post("/signup/verify-otp", apiLimiter, verifySignupOtp);
+router.post("/forgot-password/send-otp", apiLimiter, sendForgotPasswordOtp);
+router.post("/forgot-password/resend-otp", apiLimiter, resendForgotPasswordOtp);
+router.post("/forgot-password/verify-otp", apiLimiter, verifyForgotPasswordOtp);
 router.post("/forgot-password/request", apiLimiter, requestPasswordReset);
 router.post("/forgot-password/reset", apiLimiter, validatePasswordStrength, resetPasswordWithToken);
 router.post("/signup", apiLimiter, validatePasswordStrength, signup);
