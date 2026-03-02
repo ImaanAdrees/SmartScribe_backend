@@ -5,7 +5,8 @@ import {
   updateUserProfile,
   changePassword,
   uploadProfileImage,
-  removeProfileImage
+  removeProfileImage,
+  setUserDisabledStatus
 } from "../controllers/userControllers.js";
 import { protect, adminOnly } from "../middleware/authMiddleware.js";
 import { upload } from "../middleware/uploadMiddleware.js";
@@ -21,6 +22,7 @@ router.post("/change-password", protect, changePassword);
 
 // Admin routes
 router.get("/", protect, adminOnly, listUsers);
+router.patch("/:id/disable", protect, adminOnly, setUserDisabledStatus);
 router.delete("/:id", protect, adminOnly, deleteUser);
 
 export default router;

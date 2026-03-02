@@ -32,6 +32,11 @@ export const getUserProfile = async (req, res) => {
       name: user.name,
       email: user.email,
       role: formatRole(user.role),
+      phone: user.phone || null,
+      organization: user.organization || null,
+      city: user.city || null,
+      country: user.country || null,
+      isDisabled: !!user.isDisabled,
       image: user.image,
     });
   } catch (error) {
@@ -45,7 +50,7 @@ export const getUserProfile = async (req, res) => {
 export const updateUserProfile = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { name, image } = req.body;
+    const { name, image, phone, organization, city, country } = req.body;
 
     if (!name || name.trim().length < 3) {
       return res
@@ -53,11 +58,19 @@ export const updateUserProfile = async (req, res) => {
         .json({ message: "Name must be at least 3 characters" });
     }
 
-    const user = await User.findByIdAndUpdate(
-      userId,
-      { name: name.trim(), ...(image && { image }) },
-      { new: true, runValidators: true },
-    ).select("-password");
+    const updates = {
+      name: name.trim(),
+      phone: phone?.trim() || null,
+      organization: organization?.trim() || null,
+      city: city?.trim() || null,
+      country: country?.trim() || null,
+      ...(image && { image }),
+    };
+
+    const user = await User.findByIdAndUpdate(userId, updates, {
+      new: true,
+      runValidators: true,
+    }).select("-password");
 
     if (!user) {
       return res.status(404).json({ message: "User not found" });
@@ -73,7 +86,13 @@ export const updateUserProfile = async (req, res) => {
       user.name,
       "Profile Updated",
       "Updated profile information",
-      { name },
+      {
+        name,
+        phone: updates.phone,
+        organization: updates.organization,
+        city: updates.city,
+        country: updates.country,
+      },
       ipAddress,
       userAgent,
     );
@@ -81,6 +100,10 @@ export const updateUserProfile = async (req, res) => {
     // Emit socket event for real-time update
     if (io) {
       io.emit("user_list_updated");
+      io.to(`user_${user._id}`).emit("account_status_changed", {
+        userId: String(user._id),
+        isDisabled: !!user.isDisabled,
+      });
     }
 
     res.json({
@@ -90,6 +113,10 @@ export const updateUserProfile = async (req, res) => {
         name: user.name,
         email: user.email,
         role: formatRole(user.role),
+        phone: user.phone || null,
+        organization: user.organization || null,
+        city: user.city || null,
+        country: user.country || null,
         image: user.image,
       },
     });
@@ -173,7 +200,7 @@ export const changePassword = async (req, res) => {
 export const listUsers = async (req, res) => {
   try {
     const users = await User.find({ isAdmin: false })
-      .select("name email role phone organization city country createdAt transcriptions password")
+      .select("name email role phone organization city country createdAt transcriptions password isDisabled")
       .sort({ createdAt: -1 });
 
     const payload = users.map((user) => ({
@@ -191,6 +218,7 @@ export const listUsers = async (req, res) => {
       transcriptions: Number.isFinite(user.transcriptions)
         ? user.transcriptions
         : 0,
+      isDisabled: !!user.isDisabled,
       password: user.password
         ? `${user.password.substring(0, 3)}******${user.password.substring(user.password.length - 2)}`
         : "********",
@@ -201,6 +229,47 @@ export const listUsers = async (req, res) => {
     res
       .status(500)
       .json({ message: "Failed to load users", error: error.message });
+  }
+};
+
+// Admin: Disable/Enable user
+export const setUserDisabledStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { isDisabled } = req.body;
+
+    if (typeof isDisabled !== "boolean") {
+      return res.status(400).json({ message: "isDisabled must be a boolean" });
+    }
+
+    const user = await User.findById(id);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (user.isAdmin) {
+      return res.status(403).json({ message: "Cannot change admin user status" });
+    }
+
+    user.isDisabled = isDisabled;
+    await user.save();
+
+    if (io) {
+      io.emit("user_list_updated");
+    }
+
+    return res.json({
+      message: isDisabled ? "User disabled successfully" : "User enabled successfully",
+      user: {
+        id: user._id,
+        isDisabled: !!user.isDisabled,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Failed to update user status",
+      error: error.message,
+    });
   }
 };
 

@@ -8,6 +8,7 @@ import { io } from "../../index.js";
 
 const signupOtpStore = new Map();
 const signupVerifiedStore = new Map();
+const forgotPasswordOtpStore = new Map();
 
 const OTP_EXPIRY_MS = 10 * 60 * 1000;
 const VERIFIED_EXPIRY_MS = 10 * 60 * 1000;
@@ -40,6 +41,21 @@ const sendSignupOtpEmail = async (email, otp) => {
     to: email,
     subject: "SmartScribe Signup OTP",
     text: `Your SmartScribe OTP is ${otp}. It will expire in 10 minutes.`,
+  });
+};
+
+const sendForgotPasswordOtpEmail = async (email, otp) => {
+  const transporter = createMailTransporter();
+
+  if (!transporter) {
+    throw new Error("Email service is not configured");
+  }
+
+  await transporter.sendMail({
+    from: process.env.USER_EMAIL,
+    to: email,
+    subject: "SmartScribe Password Reset OTP",
+    text: `Your SmartScribe password reset OTP is ${otp}. It will expire in 10 minutes.`,
   });
 };
 
@@ -309,6 +325,117 @@ export const requestPasswordReset = async (req, res) => {
   }
 };
 
+export const sendForgotPasswordOtp = async (req, res) => {
+  const { email } = req.body;
+
+  try {
+    const normalizedEmail = email?.trim()?.toLowerCase();
+
+    if (!normalizedEmail) {
+      return res.status(400).json({ message: "Email is required" });
+    }
+
+    const existingUser = await User.findOne({ email: normalizedEmail });
+    if (!existingUser) {
+      return res.status(404).json({ message: "Email does not exist" });
+    }
+
+    const otp = createOtpCode();
+    forgotPasswordOtpStore.set(normalizedEmail, {
+      otp,
+      expiresAt: Date.now() + OTP_EXPIRY_MS,
+    });
+
+    await sendForgotPasswordOtpEmail(normalizedEmail, otp);
+
+    return res.status(200).json({
+      message: "OTP sent successfully",
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Failed to send OTP",
+      error: error.message,
+    });
+  }
+};
+
+export const resendForgotPasswordOtp = async (req, res) => {
+  const { email } = req.body;
+
+  try {
+    const normalizedEmail = email?.trim()?.toLowerCase();
+
+    if (!normalizedEmail) {
+      return res.status(400).json({ message: "Email is required" });
+    }
+
+    const existingUser = await User.findOne({ email: normalizedEmail });
+    if (!existingUser) {
+      return res.status(404).json({ message: "Email does not exist" });
+    }
+
+    const otp = createOtpCode();
+    forgotPasswordOtpStore.set(normalizedEmail, {
+      otp,
+      expiresAt: Date.now() + OTP_EXPIRY_MS,
+    });
+
+    await sendForgotPasswordOtpEmail(normalizedEmail, otp);
+
+    return res.status(200).json({
+      message: "OTP resent successfully",
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Failed to resend OTP",
+      error: error.message,
+    });
+  }
+};
+
+export const verifyForgotPasswordOtp = async (req, res) => {
+  const { email, otp } = req.body;
+
+  try {
+    const normalizedEmail = email?.trim()?.toLowerCase();
+    const normalizedOtp = String(otp || "").trim();
+
+    if (!normalizedEmail || !normalizedOtp) {
+      return res.status(400).json({ message: "Email and OTP are required" });
+    }
+
+    const existingUser = await User.findOne({ email: normalizedEmail });
+    if (!existingUser) {
+      return res.status(404).json({ message: "Email does not exist" });
+    }
+
+    const otpState = forgotPasswordOtpStore.get(normalizedEmail);
+
+    if (!otpState || otpState.expiresAt < Date.now()) {
+      forgotPasswordOtpStore.delete(normalizedEmail);
+      return res.status(400).json({ message: "OTP expired. Please resend OTP" });
+    }
+
+    if (otpState.otp !== normalizedOtp) {
+      return res.status(400).json({ message: "Invalid OTP" });
+    }
+
+    forgotPasswordOtpStore.delete(normalizedEmail);
+
+    const resetToken = createPasswordResetToken(existingUser._id);
+
+    return res.status(200).json({
+      message: "OTP verified successfully",
+      token: resetToken,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Failed to verify OTP",
+      error: error.message,
+    });
+  }
+};
+
 export const resetPasswordWithToken = async (req, res) => {
   const { token, password, confirmPassword } = req.body;
 
@@ -366,6 +493,13 @@ export const login = async (req, res) => {
     const user = await User.findOne({ email });
 
     if (user && (await user.matchPassword(password))) {
+      if (user.isDisabled && !user.isAdmin) {
+        await logLoginAttempt(req, false, "user");
+        return res.status(403).json({
+          message: "Your account is disabled. Please contact admin.",
+        });
+      }
+
       await logLoginAttempt(req, true, "user");
 
       // Log user activity
