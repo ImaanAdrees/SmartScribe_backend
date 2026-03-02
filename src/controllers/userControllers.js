@@ -324,6 +324,12 @@ export const deleteUser = async (req, res) => {
       { $pull: { targetUserIds: user._id } },
     );
 
+    if (io) {
+      io.to(`user_${user._id}`).emit("account_deleted", {
+        userId: String(user._id),
+      });
+    }
+
     await User.deleteOne({ _id: id });
 
     // Emit socket event for real-time update
