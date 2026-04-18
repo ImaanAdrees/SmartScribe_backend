@@ -8,7 +8,9 @@ import {
   getUsageData,
   getActivitySummary,
   getUserActivities,
+  getRecentActivities,
 } from "../controllers/activityControllers.js";
+
 import { protect, adminOnly } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
@@ -24,5 +26,6 @@ router.get("/top-users", protect, adminOnly, getTopUsers);
 router.get("/top-users-breakdown", protect, adminOnly, getTopUsersBreakdown);
 router.get("/usage", protect, adminOnly, getUsageData);
 router.get("/summary", protect, adminOnly, getActivitySummary);
-
+// Recent activities for logged-in user
+router.get("/recent", protect, getRecentActivities);
 export default router;

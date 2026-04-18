@@ -1,3 +1,4 @@
+
 import UserActivity from "../models/UserActivity.js";
 import User from "../models/User.js";
 import {
@@ -65,18 +66,20 @@ export const logActivity = async (req, res) => {
       userAgent,
     );
 
-    // Emit real-time analytics update to connected clients
+    // Emit real-time activity update to the user's room
     try {
       if (io && activity) {
-        io.emit("analytics_update", {
+        io.to(String(userId)).emit("activity_update", {
           action: activity.action,
           userId: activity.userId,
           userEmail: activity.userEmail,
           timestamp: activity.timestamp,
+          description: activity.description,
+          metadata: activity.metadata,
         });
       }
     } catch (emitErr) {
-      console.error("Failed to emit analytics update:", emitErr.message);
+      console.error("Failed to emit activity update:", emitErr.message);
     }
 
     res.status(201).json({
@@ -437,5 +440,31 @@ export const getUserActivities = async (req, res) => {
     res
       .status(500)
       .json({ message: "Failed to fetch activities", error: error.message });
+  }
+};
+
+/**
+ * Get recent activities for the logged-in user (last 3)
+ * GET /api/activity/recent
+ */
+export const getRecentActivities = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const activities = await UserActivity.find({ userId })
+      .sort({ timestamp: -1 })
+      .limit(3)
+      .lean();
+
+    const formatted = activities.map((log) => ({
+      _id: log._id,
+      timestamp: log.timestamp,
+      action: log.action,
+      description: log.description,
+      metadata: log.metadata,
+    }));
+    res.json({ activities: formatted });
+  } catch (error) {
+    console.error("Error fetching recent activities:", error.message);
+    res.status(500).json({ message: "Failed to fetch recent activities", error: error.message });
   }
 };

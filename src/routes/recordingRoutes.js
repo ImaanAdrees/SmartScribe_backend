@@ -3,6 +3,7 @@ import multer from 'multer';
 import path from 'path';
 import Recording from '../models/Recording.js';
 import Transcription from '../models/Transcription.js';
+import Summary from '../models/Summary.js';
 import User from '../models/User.js';
 import { protect } from '../middleware/authMiddleware.js';
 import { transcribeAudio, labelSpeakers } from '../utils/openaiUtils.js';
@@ -96,6 +97,7 @@ router.delete('/:id', protect, async (req, res) => {
 
     try {
       await Transcription.deleteMany({ recording: req.params.id });
+      await Summary.deleteMany({ recording: req.params.id });
       await Recording.findByIdAndDelete(req.params.id);
     } catch (dbErr) {
       console.error('DB delete failed for recording', req.params.id, dbErr);
@@ -172,6 +174,18 @@ router.post('/:id/transcribe', protect, async (req, res) => {
       { recordingId: recording._id, transcriptionId: transcription._id }
     );
 
+    // Emit real-time event to user's room for transcription created
+    if (req.app && req.app.get('io')) {
+      req.app.get('io').to(`user_${req.user._id}`).emit('transcription_created', {
+        recordingId: recording._id,
+        transcription,
+      });
+    } else if (typeof io !== 'undefined') {
+      io.to(`user_${req.user._id}`).emit('transcription_created', {
+        recordingId: recording._id,
+        transcription,
+      });
+    }
     res.json({ success: true, transcription });
   } catch (err) {
     console.error('Transcription error:', err);
@@ -193,6 +207,16 @@ router.put('/:id/rename', protect, async (req, res) => {
     }
     recording.name = name.trim();
     await recording.save();
+    // Update all summaries for this recording with the new name
+    try {
+      await fetch(`${process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:5000'}/api/summary/update-titles-for-recording/${recording._id}`, {
+        method: 'PATCH',
+        headers: { 'Authorization': req.headers['authorization'] || '' },
+      });
+    } catch (e) {
+      // Log but don't block rename if this fails
+      console.error('Failed to update summary titles after rename:', e);
+    }
     res.json({ success: true, recording });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
