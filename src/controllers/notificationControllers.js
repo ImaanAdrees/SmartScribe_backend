@@ -3,6 +3,7 @@ import Notification from "../models/Notification.js";
 import User from "../models/User.js";
 import UserNotification from "../models/UserNotification.js";
 import { io } from "../../index.js";
+import { sendExpoPushNotifications } from "../utils/expoPush.js";
 
 const normalizeType = (type) => {
   if (!type) return "info";
@@ -160,13 +161,34 @@ export const createNotification = async (req, res) => {
       createdBy: req.user._id,
     });
 
-    // Emit real-time notification via Socket.IO if notification is sent immediately
+
+    // Emit real-time notification via Socket.IO and send Expo push if notification is sent immediately
     if (!isScheduled) {
       await emitNotificationViaSocket(
         notification,
         normalizedAudience,
         userIds,
       );
+
+      // Send Expo push notifications
+      let usersToNotify = [];
+      if (normalizedAudience === "all") {
+        usersToNotify = await User.find({ isAdmin: false, expoPushToken: { $ne: null } }).select("expoPushToken");
+      } else if (normalizedAudience === "students") {
+        usersToNotify = await User.find({ isAdmin: false, role: "student", expoPushToken: { $ne: null } }).select("expoPushToken");
+      } else if (normalizedAudience === "teachers") {
+        usersToNotify = await User.find({ isAdmin: false, role: "teacher", expoPushToken: { $ne: null } }).select("expoPushToken");
+      } else if (normalizedAudience === "user" && userIds.length > 0) {
+        usersToNotify = await User.find({ isAdmin: false, _id: { $in: userIds }, expoPushToken: { $ne: null } }).select("expoPushToken");
+      }
+      const pushTokens = usersToNotify.map((u) => u.expoPushToken).filter(Boolean);
+      if (pushTokens.length > 0) {
+        await sendExpoPushNotifications(pushTokens, {
+          title: notification.title,
+          body: notification.message,
+          data: { notificationId: notification._id },
+        });
+      }
     }
 
     res.status(201).json({
