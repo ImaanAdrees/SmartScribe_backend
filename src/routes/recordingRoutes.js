@@ -179,4 +179,23 @@ router.post('/:id/transcribe', protect, async (req, res) => {
   }
 });
 
+// Rename a recording
+router.put('/:id/rename', protect, async (req, res) => {
+  try {
+    const { name } = req.body;
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      return res.status(400).json({ success: false, error: 'Name is required' });
+    }
+    const recording = await Recording.findById(req.params.id);
+    if (!recording) return res.status(404).json({ success: false, error: 'Recording not found' });
+    if (String(recording.user) !== String(req.user._id)) {
+      return res.status(403).json({ success: false, error: 'Not authorized' });
+    }
+    recording.name = name.trim();
+    await recording.save();
+    res.json({ success: true, recording });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 export default router;
