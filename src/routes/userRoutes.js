@@ -6,7 +6,8 @@ import {
   changePassword,
   uploadProfileImage,
   removeProfileImage,
-  setUserDisabledStatus
+  setUserDisabledStatus,
+  saveExpoPushToken
 } from "../controllers/userControllers.js";
 import { protect, adminOnly } from "../middleware/authMiddleware.js";
 import { upload } from "../middleware/uploadMiddleware.js";
@@ -19,6 +20,9 @@ router.put("/profile", protect, updateUserProfile);
 router.post("/profile/image", protect, upload.single("image"), uploadProfileImage);
 router.delete("/profile/image", protect, removeProfileImage);
 router.post("/change-password", protect, changePassword);
+
+// Expo push token
+router.post("/expo-push-token", protect, saveExpoPushToken);
 
 // Admin routes
 router.get("/", protect, adminOnly, listUsers);

@@ -465,3 +465,24 @@ export const removeProfileImage = async (req, res) => {
       .json({ message: "Failed to remove image", error: error.message });
   }
 };
+// Save Expo push token
+export const saveExpoPushToken = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { expoPushToken } = req.body;
+    if (!expoPushToken) {
+      return res.status(400).json({ message: "Expo push token is required" });
+    }
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { expoPushToken },
+      { new: true, runValidators: true }
+    ).select("-password");
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    res.json({ message: "Expo push token saved", expoPushToken });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to save Expo push token", error: error.message });
+  }
+};

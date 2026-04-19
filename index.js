@@ -15,6 +15,8 @@ import maintenanceRoutes from "./src/routes/maintenanceRoutes.js";
 import activityRoutes from "./src/routes/activityRoutes.js";
 import recordingRoutes from "./src/routes/recordingRoutes.js";
 import contactRoutes from "./src/routes/contactRoutes.js";
+import summaryRoutes from "./src/routes/summaryRoutes.js";
+import transcriptionRoutes from "./src/routes/transcriptionRoutes.js";
 import { initializeMaintenance } from "./src/controllers/maintenanceControllers.js";
 import { startBackupScheduler } from "./src/utils/backupScheduler.js";
 
@@ -97,6 +99,8 @@ app.use("/api/maintenance", maintenanceRoutes);
 app.use("/api/activity", activityRoutes);
 app.use("/api/recording", recordingRoutes);
 app.use("/api/contact", contactRoutes);
+app.use("/api/summary", summaryRoutes);
+app.use("/api/transcription", transcriptionRoutes);
 
 server.listen(5000, () => {
   console.log("server is listing on port no 5000");
