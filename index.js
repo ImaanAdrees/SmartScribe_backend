@@ -17,6 +17,7 @@ import recordingRoutes from "./src/routes/recordingRoutes.js";
 import contactRoutes from "./src/routes/contactRoutes.js";
 import summaryRoutes from "./src/routes/summaryRoutes.js";
 import transcriptionRoutes from "./src/routes/transcriptionRoutes.js";
+import aiRoutes from "./src/routes/aiRoutes.js";
 import { initializeMaintenance } from "./src/controllers/maintenanceControllers.js";
 import { startBackupScheduler } from "./src/utils/backupScheduler.js";
 
@@ -101,6 +102,7 @@ app.use("/api/recording", recordingRoutes);
 app.use("/api/contact", contactRoutes);
 app.use("/api/summary", summaryRoutes);
 app.use("/api/transcription", transcriptionRoutes);
+app.use("/api/ai", aiRoutes);
 
 server.listen(5000, () => {
   console.log("server is listing on port no 5000");
