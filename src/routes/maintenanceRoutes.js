@@ -13,7 +13,9 @@ import {
   getBackupHistory,
   deleteAPKVersion,
   getPublicAPKHistory,
+  downloadBackupReport,
 } from "../controllers/maintenanceControllers.js";
+
 import { protect, adminOnly } from "../middleware/authMiddleware.js";
 import { apkUpload } from "../middleware/apkUploadMiddleware.js";
 
@@ -44,5 +46,6 @@ router.get("/backup-history", protect, adminOnly, getBackupHistory);
 // System Information
 router.get("/system-info", protect, adminOnly, getSystemInfo);
 router.get("/update-history", protect, adminOnly, getUpdateHistory);
-
+// Download Backup Report PDF
+router.get("/download-backup-report/:backupId", protect, adminOnly, downloadBackupReport);
 export default router;

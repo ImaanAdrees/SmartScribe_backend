@@ -104,6 +104,73 @@ router.get('/user/all', protect, async (req, res) => {
   }
 });
 
+// GET /api/summary/export/:id
+router.get('/export/:id', protect, async (req, res) => {
+  try {
+    const { format } = req.query;
+    if (!['pdf', 'txt'].includes(format)) {
+      return res.status(400).json({ success: false, error: 'Invalid format' });
+    }
+
+    const summary = await Summary.findById(req.params.id);
+    if (!summary || String(summary.user) !== String(req.user._id)) {
+      return res.status(404).json({ success: false, error: 'Summary not found' });
+    }
+
+    const title = summary.title || 'Summary';
+    const content = summary.summaryText || '';
+
+    if (format === 'txt') {
+      res.setHeader('Content-Type', 'text/plain');
+      res.setHeader('Content-Disposition', `attachment; filename="${title}.txt"`);
+      return res.send(`Title: ${title}\n\n${content}`);
+    }
+
+    if (format === 'pdf') {
+      const { jsPDF } = await import('jspdf');
+      const doc = new jsPDF();
+      const fs = await import('fs');
+      const path = await import('path');
+      
+      try {
+        const logoPath = path.resolve('src/logo/mainlogo.png');
+        const logoBase64 = fs.readFileSync(logoPath).toString('base64');
+        
+        doc.saveGraphicsState();
+        doc.setGState(new doc.GState({opacity: 0.15}));
+        doc.addImage(`data:image/png;base64,${logoBase64}`, 'PNG', 55, 98, 100, 100);
+        doc.restoreGraphicsState();
+      } catch (err) {
+        console.warn('Could not load logo for PDF watermark:', err);
+      }
+
+      doc.setFontSize(18);
+      doc.text(title, 10, 20);
+
+      doc.setFontSize(12);
+      const splitText = doc.splitTextToSize(content, 180);
+      let yOffset = 30;
+      
+      for (let i = 0; i < splitText.length; i++) {
+        if (yOffset > 280) {
+          doc.addPage();
+          yOffset = 20;
+        }
+        doc.text(splitText[i], 10, yOffset);
+        yOffset += 7;
+      }
+
+      const pdfBuffer = Buffer.from(doc.output('arraybuffer'));
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${title}.pdf"`);
+      return res.send(pdfBuffer);
+    }
+  } catch (err) {
+    console.error('Export error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // PATCH /api/summary/:id
 router.patch('/:id', protect, async (req, res) => {
   try {

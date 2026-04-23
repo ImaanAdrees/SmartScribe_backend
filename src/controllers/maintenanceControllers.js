@@ -1,3 +1,4 @@
+
 import path from "path";
 import fs from "fs";
 import Maintenance from "../models/Maintenance.js";
@@ -666,5 +667,31 @@ export const deleteAPKVersion = async (req, res) => {
       message: "Error deleting APK version",
       error: error.message,
     });
+  }
+};
+
+// Download Backup Report PDF
+export const downloadBackupReport = async (req, res) => {
+  try {
+    const { backupId } = req.params;
+    const backup = await Backup.findOne();
+    if (!backup || !backup.backupHistory) {
+      return res.status(404).json({ success: false, message: "No backup history found" });
+    }
+    const entry = backup.backupHistory.find(b => b.backupId === backupId);
+    if (!entry || !entry.reportPdfPath) {
+      return res.status(404).json({ success: false, message: "PDF report not found for this backup" });
+    }
+    // Absolute path
+    const filePath = path.resolve(entry.reportPdfPath.replace(/^\//, ""));
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ success: false, message: "PDF file missing on server" });
+    }
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename=${backupId}.pdf`);
+    fs.createReadStream(filePath).pipe(res);
+  } catch (error) {
+    console.error("Error downloading backup PDF:", error);
+    res.status(500).json({ success: false, message: "Error downloading backup PDF", error: error.message });
   }
 };

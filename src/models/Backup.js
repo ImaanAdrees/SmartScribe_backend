@@ -63,6 +63,9 @@ const backupSchema = new mongoose.Schema(
         backupPath: {
           type: String,
         },
+        reportPdfPath: {
+          type: String,
+        },
         triggeredBy: {
           type: mongoose.Schema.Types.ObjectId,
           ref: "User",

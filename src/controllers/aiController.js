@@ -41,7 +41,7 @@ export const chatWithAI = async (req, res) => {
 
     const context = await getTranscriptContext(userId);
 
-    const systemPrompt = `You are SmartScribe AI, a helpful assistant for ${userName}.
+    const systemPrompt = `You are SmartScribe AI Assistant, a helpful assistant for ${userName}.
 Your primary goal is to help ${userName} with questions about their meeting transcripts and recordings.
 All of ${userName}'s recent transcripts are provided below as context, including the meeting name and date.
 When answering based on a transcript, ALWAYS mention which meeting it came from (e.g., "In the 'Project Sync' meeting on 4/21/2026, you discussed...").
@@ -101,7 +101,7 @@ export const voiceChat = async (req, res) => {
     const userName = req.user.name;
     const context = await getTranscriptContext(userId);
 
-    const systemPrompt = `You are SmartScribe AI, a helpful assistant for ${userName}.
+    const systemPrompt = `You are SmartScribe AI Assistant, a helpful assistant for ${userName}.
 Your primary goal is to help ${userName} with questions about their meeting transcripts and recordings.
 All of ${userName}'s recent transcripts are provided below as context, including the meeting name and date.
 When answering based on a transcript, ALWAYS mention which meeting it came from (e.g., "In the 'Project Sync' meeting on 4/21/2026, you discussed...").
