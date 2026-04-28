@@ -1,3 +1,4 @@
+
 import jwt from "jsonwebtoken";
 import nodemailer from "nodemailer";
 import User from "../models/User.js";
@@ -829,5 +830,89 @@ export const changeAdminPassword = async (req, res) => {
   } catch (error) {
     console.error("Change password error:", error);
     res.status(500).json({ message: "Failed to change password" });
+  }
+};
+
+// --- ADMIN FORGOT PASSWORD FLOW ---
+// POST /api/auth/admin/request-otp
+export const adminRequestOtp = async (req, res) => {
+  const { email } = req.body;
+  try {
+    const normalizedEmail = email?.trim()?.toLowerCase();
+    if (!normalizedEmail) {
+      return res.status(400).json({ message: "Email is required" });
+    }
+    const admin = await User.findOne({ email: normalizedEmail, isAdmin: true });
+    if (!admin) {
+      return res.status(404).json({ message: "Admin email not found" });
+    }
+    const otp = createOtpCode();
+    forgotPasswordOtpStore.set(normalizedEmail, {
+      otp,
+      expiresAt: Date.now() + OTP_EXPIRY_MS,
+    });
+    await sendForgotPasswordOtpEmail(normalizedEmail, otp);
+    return res.status(200).json({ message: "OTP sent to admin email" });
+  } catch (error) {
+    return res.status(500).json({ message: "Failed to send OTP", error: error.message });
+  }
+};
+
+// POST /api/auth/admin/verify-otp
+export const adminVerifyOtp = async (req, res) => {
+  const { email, otp } = req.body;
+  try {
+    const normalizedEmail = email?.trim()?.toLowerCase();
+    const normalizedOtp = String(otp || "").trim();
+    if (!normalizedEmail || !normalizedOtp) {
+      return res.status(400).json({ message: "Email and OTP are required" });
+    }
+    const admin = await User.findOne({ email: normalizedEmail, isAdmin: true });
+    if (!admin) {
+      return res.status(404).json({ message: "Admin email not found" });
+    }
+    const otpState = forgotPasswordOtpStore.get(normalizedEmail);
+    if (!otpState || otpState.expiresAt < Date.now()) {
+      forgotPasswordOtpStore.delete(normalizedEmail);
+      return res.status(400).json({ message: "OTP expired. Please resend OTP" });
+    }
+    if (otpState.otp !== normalizedOtp) {
+      return res.status(400).json({ message: "Invalid OTP" });
+    }
+    forgotPasswordOtpStore.delete(normalizedEmail);
+    // Mark OTP verified for this email (in-memory)
+    signupVerifiedStore.set(normalizedEmail, { expiresAt: Date.now() + VERIFIED_EXPIRY_MS });
+    return res.status(200).json({ message: "OTP verified. You may now reset your password." });
+  } catch (error) {
+    return res.status(500).json({ message: "Failed to verify OTP", error: error.message });
+  }
+};
+
+// POST /api/auth/admin/reset-password
+export const adminResetPassword = async (req, res) => {
+  const { email, otp, newPassword } = req.body;
+  try {
+    const normalizedEmail = email?.trim()?.toLowerCase();
+    const normalizedOtp = String(otp || "").trim();
+    if (!normalizedEmail || !normalizedOtp || !newPassword) {
+      return res.status(400).json({ message: "Email, OTP, and new password are required" });
+    }
+    const admin = await User.findOne({ email: normalizedEmail, isAdmin: true });
+    if (!admin) {
+      return res.status(404).json({ message: "Admin email not found" });
+    }
+    // Check OTP was verified (in-memory)
+    const verifiedState = signupVerifiedStore.get(normalizedEmail);
+    if (!verifiedState || verifiedState.expiresAt < Date.now()) {
+      signupVerifiedStore.delete(normalizedEmail);
+      return res.status(400).json({ message: "OTP not verified or expired" });
+    }
+    signupVerifiedStore.delete(normalizedEmail);
+    // Update password
+    admin.password = newPassword;
+    await admin.save();
+    return res.status(200).json({ message: "Admin password updated successfully" });
+  } catch (error) {
+    return res.status(500).json({ message: "Failed to reset password", error: error.message });
   }
 };

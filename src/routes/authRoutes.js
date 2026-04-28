@@ -17,8 +17,12 @@ import {
   refreshAdminToken,
   getAdminProfile,
   updateAdminProfile,
-  changeAdminPassword
+  changeAdminPassword,
+  adminRequestOtp,
+  adminVerifyOtp,
+  adminResetPassword
 } from "../controllers/authControllers.js";
+
 import { changePassword } from "../controllers/userControllers.js";
 import { protect, adminOnly } from "../middleware/authMiddleware.js";
 import { 
@@ -57,4 +61,9 @@ router.get("/admin/profile", protect, adminOnly, getAdminProfile);
 router.put("/admin/profile/update", protect, adminOnly, updateAdminProfile);
 router.put("/admin/profile/change-password", protect, adminOnly, changeAdminPassword);
 
+
+// Admin forgot password endpoints (must be after router is declared)
+router.post("/admin/request-otp", apiLimiter, adminRequestOtp);
+router.post("/admin/verify-otp", apiLimiter, adminVerifyOtp);
+router.post("/admin/reset-password", apiLimiter, adminResetPassword);
 export default router;
