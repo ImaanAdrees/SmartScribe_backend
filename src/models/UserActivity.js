@@ -25,6 +25,7 @@ const userActivitySchema = new mongoose.Schema(
         "Summary Generated",
         "Profile Updated",
         "Export PDF",
+        "Export TXT",
         "File Upload",
         "File Download",
         "Settings Changed",

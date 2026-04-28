@@ -7,7 +7,8 @@ const router = express.Router();
 // GET /api/transcription/user/all
 router.get('/user/all', protect, async (req, res) => {
   try {
-    const transcriptions = await Transcription.find({ user: req.user._id }).sort({ createdAt: -1 });
+    // Populate the associated recording so frontend can display recording names
+    const transcriptions = await Transcription.find({ user: req.user._id }).populate('recording').sort({ createdAt: -1 });
     res.json({ success: true, transcriptions });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
