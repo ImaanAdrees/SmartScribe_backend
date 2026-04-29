@@ -73,10 +73,10 @@ export async function generateBackupReportPDF({ outputPath, logoPath, data, date
     const cardHeight = 80;
     
     const summaryItems = [
-      { label: "Total Users", value: data.totalUsers, color: colors.secondary, icon: "👥" },
-      { label: "Transcriptions", value: data.totalTranscriptions, color: colors.success, icon: "🎙️" },
-      { label: "Summaries", value: data.totalSummaries, color: colors.warning, icon: "📝" },
-      { label: "Exports", value: data.totalExports, color: colors.info, icon: "📤" }
+      { label: "Total Users", value: data.totalUsers, color: colors.secondary },
+      { label: "Transcriptions", value: data.totalTranscriptions, color: colors.success },
+      { label: "Summaries", value: data.totalSummaries, color: colors.warning },
+      { label: "Exports", value: data.totalExports, color: colors.info }
     ];
     
     summaryItems.forEach((item, index) => {
@@ -115,7 +115,7 @@ export async function generateBackupReportPDF({ outputPath, logoPath, data, date
     doc.fillColor(colors.primary)
       .fontSize(18)
       .font("Helvetica-Bold")
-      .text("🏆 TOP USERS", 40, doc.y);
+      .text("TOP USERS", 40, doc.y);
     
     doc.moveDown(0.5);
     
